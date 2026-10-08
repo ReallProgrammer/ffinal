@@ -119,6 +119,12 @@ export default function Terminal({ window: w, active }: { window: WindowData; ac
           explorer: 'explorer',
           browser: 'browser',
           game: 'game',
+          games: 'games',
+          snake: 'snake',
+          pong: 'pong',
+          minesweeper: 'minesweeper',
+          shelf: 'shelf',
+          taskmgr: 'taskmanager',
         } as const;
         const app = apps[arg.toLowerCase() as keyof typeof apps];
         if (app) {

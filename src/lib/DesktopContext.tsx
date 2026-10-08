@@ -1,3 +1,4 @@
+import type { SoundKind } from './sound';
 import { createContext, useContext } from 'react';
 import type { AppId, FileEntry, Settings, WindowData } from '../types';
 export interface DesktopContextType {
@@ -7,7 +8,11 @@ export interface DesktopContextType {
   updateWindow: (id: string, patch: Partial<WindowData>) => void;
   settings: Settings;
   setSettings: (patch: Partial<Settings>) => void;
-  beep: (kind: 'click' | 'open' | 'close' | 'boot' | 'error' | 'type') => void;
+  beep: (kind: SoundKind) => void;
+  windows: WindowData[];
+  focusWindow: (id: string) => void;
+  clearTemporary: () => void;
+  resetDesktop: () => void;
   bsod: () => void;
   restart: () => void;
   notify: (message: string) => void;

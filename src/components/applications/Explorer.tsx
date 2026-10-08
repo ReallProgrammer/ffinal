@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,12 +11,28 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { useDesktop } from '../../lib/DesktopContext';
-import { files, getFile, children, filePath } from '../../data/filesystem';
+import {
+  files,
+  getFile,
+  children,
+  filePath,
+  useFiles,
+  renameFile,
+  removeFiles,
+  restoreFile,
+  clipboardFiles,
+  pasteFiles,
+  createFile,
+  moveFiles,
+  FILE_DRAG_TYPE,
+} from '../../data/filesystem';
 import { profile } from '../../data/profile';
 import type { FileEntry, WindowData } from '../../types';
 import Icon from '../Icon';
 import MenuBar from '../MenuBar';
-export default function Explorer({ window: w }: { window: WindowData }) {
+import ContextMenu from '../ContextMenu';
+export default function Explorer({ window: w, active }: { window: WindowData; active: boolean }) {
+  useFiles();
   const { openFile, launch, updateWindow, notify } = useDesktop();
   const [history, setHistory] = useState([w.params.folder || 'computer']);
   const [index, setIndex] = useState(0);
@@ -25,6 +41,68 @@ export default function Explorer({ window: w }: { window: WindowData }) {
   const [selected, setSelected] = useState('');
   const [list, setList] = useState(false);
   const [context, setContext] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
+  const [rename, setRename] = useState<{ id: string; name: string } | null>(null);
+  const [dropFolder, setDropFolder] = useState('');
+  const attempt = (action: () => void) => {
+    try {
+      action();
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  };
+  const newEntry = (kind: 'folder' | 'text') => {
+    const parent = folder === 'computer' ? 'disk' : folder;
+    const base = kind === 'folder' ? 'New Folder' : 'New Document.txt';
+    let name = base,
+      n = 2;
+    while (children(parent).some((f) => f.name === name)) name = `${base} (${n++})`;
+    attempt(() => {
+      const f = createFile(parent, name, kind);
+      setSelected(f.id);
+      setRename({ id: f.id, name: f.name });
+    });
+  };
+  useEffect(() => {
+    if (!active) return;
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).matches('input,textarea,select')) return;
+      const f = getFile(selected);
+      if (e.key === 'Escape') {
+        setContext(null);
+        setRename(null);
+      }
+      if (e.key === 'F2' && f) {
+        e.preventDefault();
+        setRename({ id: f.id, name: f.name });
+      }
+      if (e.key === 'Delete' && f) {
+        e.preventDefault();
+        attempt(() => removeFiles([f.id]));
+      }
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase();
+        if (['c', 'x'].includes(k) && f) {
+          e.preventDefault();
+          clipboardFiles([f.id], k === 'x');
+          notify(k === 'x' ? 'Ready to move. Choose a folder and paste.' : 'File copied.');
+        }
+        if (k === 'v') {
+          e.preventDefault();
+          attempt(() => pasteFiles(folder === 'computer' ? 'disk' : folder));
+        }
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [active, selected, folder]);
+  const dropFiles = (e: React.DragEvent, parent: string) => {
+    const data = e.dataTransfer.getData(FILE_DRAG_TYPE);
+    if (!data) return;
+    e.preventDefault();
+    e.stopPropagation();
+    attempt(() => moveFiles(JSON.parse(data), parent));
+    setDropFolder('');
+  };
   function navigate(id: string) {
     setHistory((h) => [...h.slice(0, index + 1), id]);
     setIndex(index + 1);
@@ -68,12 +146,25 @@ export default function Explorer({ window: w }: { window: WindowData }) {
                 },
                 disabled: !selected,
               },
-              { label: 'New text document', action: () => launch('notepad') },
+              { label: 'New text document', action: () => newEntry('text') },
+              { label: 'New folder', action: () => newEntry('folder') },
             ],
           },
           {
             label: 'Edit',
-            items: [{ label: 'Select first item', action: () => setSelected(items[0]?.id || '') }],
+            items: [
+              { label: 'Copy', disabled: !selected, action: () => clipboardFiles([selected]) },
+              { label: 'Cut', disabled: !selected, action: () => clipboardFiles([selected], true) },
+              {
+                label: 'Paste',
+                action: () => attempt(() => pasteFiles(folder === 'computer' ? 'disk' : folder)),
+              },
+              {
+                label: 'Delete',
+                disabled: !selected,
+                action: () => attempt(() => removeFiles([selected])),
+              },
+            ],
           },
           {
             label: 'View',
@@ -203,6 +294,14 @@ export default function Explorer({ window: w }: { window: WindowData }) {
               <Icon name="mail" size={17} />
               Get in touch
             </button>
+            <button onClick={() => launch('shelf')}>
+              <Icon name="certificate" size={17} />
+              My Shelf
+            </button>
+            <button onClick={() => launch('games')}>
+              <Icon name="game" size={17} />
+              Games
+            </button>
             <button onClick={() => navigate('recycle')}>
               <Icon name="recycle" size={17} />
               Recycle Bin
@@ -225,7 +324,18 @@ export default function Explorer({ window: w }: { window: WindowData }) {
             </p>
           </div>
         </aside>
-        <main className="explorer-main">
+        <main
+          className={`explorer-main ${dropFolder === folder ? 'file-drop-active' : ''}`}
+          data-folder-drop={folder === 'computer' ? 'disk' : folder}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes(FILE_DRAG_TYPE)) {
+              e.preventDefault();
+              setDropFolder(folder);
+            }
+          }}
+          onDragLeave={() => setDropFolder('')}
+          onDrop={(e) => dropFiles(e, folder === 'computer' ? 'disk' : folder)}
+        >
           {folder === 'computer' ? (
             <>
               <div className="welcome-hero">
@@ -273,7 +383,30 @@ export default function Explorer({ window: w }: { window: WindowData }) {
             {items.map((file) => (
               <button
                 key={file.id}
-                className={`file-item ${selected === file.id ? 'file-selected' : ''}`}
+                draggable
+                data-file-id={file.id}
+                data-folder-drop={file.kind === 'folder' ? file.id : undefined}
+                onDragStart={(e) => {
+                  setSelected(file.id);
+                  e.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify([file.id]));
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.currentTarget.classList.add('file-dragging');
+                }}
+                onDragEnd={(e) => {
+                  e.currentTarget.classList.remove('file-dragging');
+                  setDropFolder('');
+                }}
+                onDragOver={(e) => {
+                  if (file.kind === 'folder' && e.dataTransfer.types.includes(FILE_DRAG_TYPE)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDropFolder(file.id);
+                  }
+                }}
+                onDrop={(e) => {
+                  if (file.kind === 'folder') dropFiles(e, file.id);
+                }}
+                className={`file-item ${selected === file.id ? 'file-selected' : ''} ${dropFolder === file.id ? 'file-drop-active' : ''}`}
                 onClick={(e) => {
                   setSelected(file.id);
                   if (e.detail === 0 || matchMedia('(pointer: coarse)').matches) activate(file);
@@ -343,23 +476,74 @@ export default function Explorer({ window: w }: { window: WindowData }) {
         </span>
       </footer>
       {context && (
-        <div
-          className="context-menu"
-          style={{
-            left: Math.min(context.x, innerWidth - 200),
-            top: Math.min(context.y, innerHeight - 180),
-          }}
-        >
-          <button onClick={() => activate(context.file)}>Open</button>
-          <button
-            onClick={() =>
-              notify(
-                `${context.file.name}\nType: ${context.file.kind}\nLocation: ${filePath(context.file.parent)}`,
-              )
-            }
+        <ContextMenu
+          x={context.x}
+          y={context.y}
+          onClose={() => setContext(null)}
+          items={[
+            { label: 'Open', action: () => activate(context.file) },
+            ...(context.file.kind === 'text'
+              ? [
+                  {
+                    label: 'Open With',
+                    children: [{ label: 'Notepad', action: () => openFile(context.file) }],
+                  },
+                ]
+              : []),
+            {
+              label: 'Rename',
+              action: () => setRename({ id: context.file.id, name: context.file.name }),
+            },
+            { label: 'Copy', action: () => clipboardFiles([context.file.id]) },
+            { label: 'Cut', action: () => clipboardFiles([context.file.id], true) },
+            ...(folder === 'recycle'
+              ? [{ label: 'Restore', action: () => attempt(() => restoreFile(context.file.id)) }]
+              : []),
+            {
+              label: folder === 'recycle' ? 'Delete permanently' : 'Delete',
+              action: () => {
+                if (folder === 'recycle' && !window.confirm('Permanently delete this item?'))
+                  return;
+                attempt(() => removeFiles([context.file.id], folder === 'recycle'));
+              },
+            },
+            {
+              label: 'Properties',
+              action: () =>
+                notify(
+                  `${context.file.name}\nType: ${context.file.kind}\nLocation: ${filePath(context.file.parent)}`,
+                ),
+            },
+          ]}
+        />
+      )}
+      {rename && (
+        <div className="app-modal-backdrop">
+          <form
+            className="app-modal"
+            onSubmit={(e) => {
+              e.preventDefault();
+              attempt(() => {
+                renameFile(rename.id, rename.name);
+                setRename(null);
+              });
+            }}
           >
-            Properties
-          </button>
+            <h3>Rename item</h3>
+            <label>
+              File name
+              <input
+                aria-label="File name"
+                autoFocus
+                value={rename.name}
+                onChange={(e) => setRename({ ...rename, name: e.target.value })}
+              />
+            </label>
+            <button className="xp-button">OK</button>
+            <button type="button" className="xp-button" onClick={() => setRename(null)}>
+              Cancel
+            </button>
+          </form>
         </div>
       )}
     </div>

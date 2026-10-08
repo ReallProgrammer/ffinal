@@ -83,9 +83,9 @@ export default function StartMenu({
             </button>
           ))}
           <hr />
-          <button onClick={() => open('game')}>
+          <button onClick={() => open('games')}>
             <Icon name="game" size={34} />
-            <span>Take a little break</span>
+            <span>Games</span>
           </button>
           <div
             className="all-programs-wrap"
@@ -104,6 +104,17 @@ export default function StartMenu({
                 {[
                   ...apps,
                   { app: 'game' as AppId, label: 'Memory Lane', icon: 'game' as IconName },
+                  ...(['snake', 'pong', 'minesweeper'] as AppId[]).map((app) => ({
+                    app,
+                    label: app[0].toUpperCase() + app.slice(1),
+                    icon: 'game' as IconName,
+                  })),
+                  { app: 'shelf' as AppId, label: 'My Shelf', icon: 'certificate' as IconName },
+                  {
+                    app: 'taskmanager' as AppId,
+                    label: 'Task Manager',
+                    icon: 'settings' as IconName,
+                  },
                   {
                     app: 'settings' as AppId,
                     label: 'Control Panel',
@@ -120,6 +131,10 @@ export default function StartMenu({
           </div>
         </div>
         <div className="start-right">
+          <button onClick={() => open('shelf')}>
+            <Icon name="certificate" size={26} />
+            <b>My Shelf</b>
+          </button>
           <button onClick={() => open('explorer', { folder: 'documents' })}>
             <Icon name="documents" size={26} />
             <b>My Documents</b>

@@ -4,7 +4,7 @@ import { useDesktop } from '../../lib/DesktopContext';
 import { profile } from '../../data/profile';
 import Icon from '../Icon';
 export default function Settings() {
-  const { settings, setSettings, launch } = useDesktop();
+  const { settings, setSettings, launch, clearTemporary, resetDesktop, restart } = useDesktop();
   const [tab, setTab] = useState('Display');
   return (
     <div className="settings-app">
@@ -54,6 +54,19 @@ export default function Settings() {
                 </div>
                 <span>After hours {settings.wallpaper === 'night' && <Check size={14} />}</span>
               </button>
+              <button
+                className={settings.wallpaper === 'slate' ? 'chosen' : ''}
+                onClick={() => setSettings({ wallpaper: 'slate' })}
+              >
+                <div className="wallpaper-swatch slate-swatch" />
+                <span>Classic teal {settings.wallpaper === 'slate' && <Check size={14} />}</span>
+              </button>
+              <button onClick={() => launch('shelf')}>
+                <div className="wallpaper-swatch personal-swatch">
+                  <Icon name="certificate" size={26} />
+                </div>
+                <span>Choose from My Shelf</span>
+              </button>
             </div>
             <label className="setting-toggle">
               <input
@@ -77,13 +90,27 @@ export default function Settings() {
                 <small>Skip the boot sequence on your next visit.</small>
               </span>
             </label>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.reducedMotion}
+                onChange={(e) => setSettings({ reducedMotion: e.target.checked })}
+              />
+              <span>
+                <b>Reduced motion</b>
+                <small>Turn off decorative transitions and animated noise.</small>
+              </span>
+            </label>
             <p className="settings-hint">Reduced-motion preferences are respected automatically.</p>
           </>
         ) : tab === 'Sounds' ? (
           <>
             <Icon name="computer" size={56} />
             <h2>The sound of a simpler time.</h2>
-            <p>Soft beeps and familiar little melodies. Sound starts only after you enable it.</p>
+            <p>
+              Soft beeps and familiar little melodies. Sound starts after your first interaction and
+              follows these controls.
+            </p>
             <label className="setting-toggle">
               <input
                 type="checkbox"
@@ -91,6 +118,30 @@ export default function Settings() {
                 onChange={(e) => setSettings({ sound: e.target.checked })}
               />
               <span>Enable system sounds</span>
+            </label>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.bootSound}
+                onChange={(e) => setSettings({ bootSound: e.target.checked })}
+              />
+              <span>Boot and shutdown sounds</span>
+            </label>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.clickSound}
+                onChange={(e) => setSettings({ clickSound: e.target.checked })}
+              />
+              <span>Mouse clicks and keyboard sounds</span>
+            </label>
+            <label className="setting-toggle">
+              <input
+                type="checkbox"
+                checked={settings.ambient}
+                onChange={(e) => setSettings({ ambient: e.target.checked })}
+              />
+              <span>Ambient fan and CRT hum</span>
             </label>
             <label className="volume-slider">
               Volume{' '}
@@ -113,7 +164,7 @@ export default function Settings() {
                 <h2>
                   Personal Computer <sup>xp</sup>
                 </h2>
-                <p>Curiosity Edition · Version 1.0</p>
+                <p>Curiosity Edition · Version 2.0</p>
               </div>
             </div>
             <hr />
@@ -133,6 +184,18 @@ export default function Settings() {
             <button className="xp-button" onClick={() => launch('explorer', { folder: 'about' })}>
               About the developer
             </button>
+            <div className="system-maintenance">
+              <h3>System maintenance</h3>
+              <button className="xp-button" onClick={clearTemporary}>
+                Clear temporary files
+              </button>
+              <button className="xp-button" onClick={resetDesktop}>
+                Reset desktop
+              </button>
+              <button className="xp-button" onClick={restart}>
+                Restart computer
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -147,6 +210,11 @@ export default function Settings() {
               volume: 0.4,
               wallpaper: 'bliss',
               skipBoot: false,
+              clickSound: true,
+              bootSound: true,
+              ambient: true,
+              reducedMotion: false,
+              bootTarget: 'windows',
             })
           }
         >

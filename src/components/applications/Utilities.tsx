@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { files } from '../../data/filesystem';
+import { files, useFiles } from '../../data/filesystem';
 import { useDesktop } from '../../lib/DesktopContext';
 import Icon from '../Icon';
 import type { AppId, WindowData } from '../../types';
 export function SearchApp() {
+  useFiles();
   const [query, setQuery] = useState('');
   const { openFile } = useDesktop();
   const results = query.trim()
@@ -71,6 +72,14 @@ export function RunApp({ window: w }: { window: WindowData }) {
       settings: 'settings',
       search: 'search',
       game: 'game',
+      games: 'games',
+      snake: 'snake',
+      pong: 'pong',
+      minesweeper: 'minesweeper',
+      shelf: 'shelf',
+      collection: 'shelf',
+      taskmgr: 'taskmanager',
+      help: 'help',
     };
     const value = command.trim().toLowerCase();
     if (value === 'bsod') {

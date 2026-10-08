@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 async function desktop(page: Page) {
   await page.goto('/');
+  await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
   await expect(page.locator('.desktop')).toBeVisible();
 }
@@ -19,8 +20,8 @@ async function run(page: Page, cmd: string) {
 test('boot progressively appears and skips into the desktop', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.boot-screen')).toBeVisible();
-  await expect(page.getByText('PERSONAL COMPUTER BIOS v2.04')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByText('PERSONAL MICRO SYSTEMS', { exact: true })).toBeVisible();
+  await page.keyboard.press('Enter');
   await expect(page.locator('[data-app="explorer"]')).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'A little curiosity. A lot of possibility.' }),
@@ -241,7 +242,10 @@ test('desktop icons can be renamed and repositioned', async ({ page }, info) => 
   await desktop(page);
   const icon = page.locator('.desktop-icon').first();
   await icon.getByRole('button').click({ button: 'right' });
-  await page.locator('.context-menu').getByRole('button', { name: 'Rename', exact: true }).click();
+  await page
+    .locator('.context-menu')
+    .getByRole('menuitem', { name: 'Rename', exact: true })
+    .click();
   await page.getByRole('textbox', { name: 'Rename desktop icon' }).fill('My Little Computer');
   await page.keyboard.press('Enter');
   await expect(icon).toContainText('My Little Computer');
@@ -282,6 +286,7 @@ test('shutdown and power-on preserve saved settings', async ({ page }) => {
   await expect(page.locator('.off-screen')).toBeVisible();
   await page.getByRole('button', { name: 'Power on', exact: true }).click();
   await expect(page.locator('.boot-screen')).toBeVisible();
-  await page.locator('.boot-screen button').first().click();
+  await page.locator('.boot-screen').waitFor();
+  await page.keyboard.press('Enter');
   await expect(page.locator('.desktop')).toBeVisible();
 });

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getFile, files } from '../../data/filesystem';
+import {
+  getFile,
+  files,
+  useFiles,
+  updateFileText,
+  createFile,
+  FILE_DRAG_TYPE,
+} from '../../data/filesystem';
 import { useDesktop } from '../../lib/DesktopContext';
 import { downloadText, readStorage, writeStorage } from '../../lib/storage';
 import type { WindowData } from '../../types';
 import MenuBar from '../MenuBar';
 export default function Notepad({ window: w, active }: { window: WindowData; active: boolean }) {
+  useFiles();
   const initial = getFile(w.params.file || '');
   const stored = readStorage<Record<string, string>>('pc-notes', {});
   const [text, setText] = useState(
@@ -26,6 +34,14 @@ export default function Notepad({ window: w, active }: { window: WindowData; act
   const save = useCallback(() => {
     const notes = readStorage<Record<string, string>>('pc-notes', {});
     if (writeStorage('pc-notes', { ...notes, [name]: text })) {
+      const file = files.find((f) => f.name === name && f.kind === 'text');
+      try {
+        if (file) updateFileText(file.id, text);
+        else createFile('documents', name, 'text', text);
+      } catch (error) {
+        notify((error as Error).message);
+        return;
+      }
       setSaved(text);
       notify(`“${name}” saved on this computer.`);
     } else {
@@ -91,7 +107,37 @@ export default function Notepad({ window: w, active }: { window: WindowData; act
     setDialog(null);
   };
   return (
-    <div className="notepad app-column">
+    <div
+      className="notepad app-column"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(FILE_DRAG_TYPE))
+          e.preventDefault();
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        const internal = e.dataTransfer.getData(FILE_DRAG_TYPE);
+        if (internal) {
+          try {
+            const f = getFile(JSON.parse(internal)[0]);
+            if (f?.kind === 'text') load(f.name, f.content || '');
+            else notify('Notepad opens text documents.');
+          } catch {
+            notify('This item could not be opened.');
+          }
+        } else {
+          const f = e.dataTransfer.files[0];
+          if (f) {
+            if (f.size > 150000) {
+              notify('This file is too large for Notepad. Keep it in the Shelf instead.');
+              return;
+            }
+            if (f.type.startsWith('text/') || /\.(txt|md|csv|log|json)$/i.test(f.name))
+              load(f.name, await f.text());
+            else notify('Notepad opens text documents. Try Shelf for images or PDFs.');
+          }
+        }
+      }}
+    >
       <MenuBar
         menus={[
           {
@@ -216,7 +262,17 @@ export default function Notepad({ window: w, active }: { window: WindowData; act
                   e.preventDefault();
                   if (!saveName.trim()) return;
                   const n = saveName.trim().replace(/[/\\]/g, '_');
-                  const ok = writeStorage('pc-notes', { ...stored, [n]: text });
+                  let ok = writeStorage('pc-notes', { ...stored, [n]: text });
+                  if (ok)
+                    try {
+                      const existing = files.find(
+                        (f) => f.parent === 'documents' && f.name === n && f.kind === 'text',
+                      );
+                      if (existing) updateFileText(existing.id, text);
+                      else createFile('documents', n, 'text', text);
+                    } catch {
+                      ok = false;
+                    }
                   downloadText(n, text);
                   setName(n);
                   setSaved(text);

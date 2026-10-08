@@ -34,6 +34,13 @@ export default function Browser({ window: w }: { window: WindowData }) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setLoading(false), 450);
   };
+  useEffect(() => {
+    const refreshEvent = (e: Event) => {
+      if ((e as CustomEvent).detail?.id === w.id) refresh();
+    };
+    window.addEventListener('pc-refresh', refreshEvent);
+    return () => window.removeEventListener('pc-refresh', refreshEvent);
+  });
   const navigate = (p: string) => {
     setHistory((h) => [...h.slice(0, index + 1), p]);
     setIndex(index + 1);

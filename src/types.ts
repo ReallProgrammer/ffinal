@@ -26,7 +26,14 @@ export type AppId =
   | 'search'
   | 'run'
   | 'game'
-  | 'dialog';
+  | 'dialog'
+  | 'shelf'
+  | 'games'
+  | 'snake'
+  | 'pong'
+  | 'minesweeper'
+  | 'taskmanager'
+  | 'help';
 export interface WindowData {
   id: string;
   app: AppId;
@@ -50,11 +57,19 @@ export interface FileEntry {
   content?: string;
   target?: string;
   app?: AppId;
+  originalParent?: string;
+  params?: Record<string, string>;
 }
 export interface Settings {
   sound: boolean;
   volume: number;
   crt: boolean;
-  wallpaper: 'bliss' | 'night';
+  wallpaper: 'bliss' | 'night' | 'slate' | 'custom';
+  customWallpaper?: string;
+  clickSound: boolean;
+  ambient: boolean;
+  bootSound: boolean;
+  reducedMotion: boolean;
+  bootTarget: 'windows' | 'linux';
   skipBoot: boolean;
 }
