@@ -61,11 +61,11 @@ export default function Settings() {
                 <div className="wallpaper-swatch slate-swatch" />
                 <span>Classic teal {settings.wallpaper === 'slate' && <Check size={14} />}</span>
               </button>
-              <button onClick={() => launch('shelf')}>
+              <button onClick={() => launch('shelf', { view: 'archive' })}>
                 <div className="wallpaper-swatch personal-swatch">
                   <Icon name="certificate" size={26} />
                 </div>
-                <span>Choose from My Shelf</span>
+                <span>Saved local images</span>
               </button>
             </div>
             <label className="setting-toggle">

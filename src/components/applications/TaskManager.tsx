@@ -98,8 +98,8 @@ export function HelpCenter() {
         delivers them to this computer.
       </p>
       <p>
-        The Shelf keeps uploaded files in this browser. Games, documents, and settings are all in
-        the Start menu.
+        The Shelf is a read-only 3D library for visitors; the owner manages published books. Games,
+        documents, and settings are all in the Start menu.
       </p>
     </div>
   );

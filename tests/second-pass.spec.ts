@@ -179,73 +179,55 @@ test('desktop group drag moves both selected icons', async ({ page }, info) => {
   expect((await two.boundingBox())!.x - b.x).toBeCloseTo(170);
 });
 
-test('Shelf uploads real files, edits metadata, reorders, persists, downloads, and deletes', async ({
+test('legacy collection files remain downloadable and usable as local wallpaper', async ({
   page,
 }) => {
   await desktop(page);
-  await run(page, 'shelf');
-  const shelf = page.locator('.shelf-app');
-  await shelf.getByRole('button', { name: 'Arrange collection', exact: true }).click();
-  await shelf.locator('input[type=file]').setInputFiles([
-    {
-      name: 'memory.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('A keepsake that survives refresh.'),
-    },
-    {
-      name: 'certificate.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF'),
-    },
-  ]);
-  await expect(shelf.locator('.shelf-slot')).toHaveCount(2);
-  await shelf.getByRole('button', { name: 'Edit memory', exact: true }).click();
-  await shelf.getByLabel('Name', { exact: true }).fill('First memory');
-  await shelf.getByLabel('Description').fill('A tiny story from today.');
-  await shelf.getByLabel('Category', { exact: true }).fill('Memories');
-  await shelf.getByRole('button', { name: 'Save object' }).click();
-  await expect(shelf.locator('.shelf-label').first()).toHaveText('First memory');
-  await shelf.getByRole('button', { name: 'Move First memory right' }).click();
-  await expect(shelf.locator('.shelf-label').last()).toHaveText('First memory');
-  await page.reload();
-  await page.locator('.boot-screen').waitFor();
-  await page.keyboard.press('Enter');
-  await run(page, 'shelf');
-  const again = page.locator('.shelf-app');
-  await expect(again.locator('.shelf-slot')).toHaveCount(2);
-  await again.locator('.shelf-artifact').last().click();
-  await expect(again.locator('.shelf-view-content')).toContainText(
-    'A keepsake that survives refresh.',
-  );
-  const download = page.waitForEvent('download');
-  await again.getByRole('button', { name: 'Download', exact: true }).click();
-  expect((await download).suggestedFilename()).toBe('memory.txt');
-  await again.getByRole('button', { name: 'Close item viewer' }).click();
-  await again.getByRole('button', { name: 'Arrange collection', exact: true }).click();
-  page.once('dialog', (d) => d.accept());
-  await again.getByRole('button', { name: 'Delete First memory' }).click();
-  await expect(again.locator('.shelf-slot')).toHaveCount(1);
-});
-
-test('Shelf image can become a persistent custom wallpaper', async ({ page }) => {
-  await desktop(page);
-  await run(page, 'shelf');
-  const shelf = page.locator('.shelf-app');
-  await shelf.getByRole('button', { name: 'Arrange collection', exact: true }).click();
-  await shelf.locator('input[type=file]').setInputFiles({
-    name: 'photo.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
-      'base64',
-    ),
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('personal-computer-collection', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('items', { keyPath: 'id' });
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('items', 'readwrite');
+        const bytes = Uint8Array.from(
+          atob(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+          ),
+          (c) => c.charCodeAt(0),
+        );
+        tx.objectStore('items').put({
+          id: 'legacy-photo',
+          name: 'A saved photograph',
+          description: '',
+          category: 'Photos',
+          filename: 'photo.png',
+          type: 'image/png',
+          size: bytes.length,
+          order: 0,
+          createdAt: new Date().toISOString(),
+          blob: new Blob([bytes], { type: 'image/png' }),
+        });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+      };
+    });
   });
-  await shelf.locator('.shelf-artifact').click();
-  await shelf.getByRole('button', { name: 'Set as wallpaper' }).click();
+  await run(page, 'shelf');
+  await page.getByRole('menuitem', { name: 'Library', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Local collection archive', exact: true }).click();
+  await expect(page.locator('.library-archive')).toContainText('A saved photograph');
+  const download = page.waitForEvent('download');
+  await page
+    .locator('.library-archive')
+    .getByRole('button', { name: 'Download', exact: true })
+    .click();
+  expect((await download).suggestedFilename()).toBe('photo.png');
+  await page.getByRole('button', { name: 'Set as wallpaper', exact: true }).click();
   await expect(page.locator('.user-wallpaper')).toBeVisible();
-  expect(
-    await page.evaluate(() => JSON.parse(localStorage.getItem('pc-settings') || '{}').wallpaper),
-  ).toBe('custom');
 });
 
 test('Snake supports play, pause, restart and a real collision', async ({ page }) => {

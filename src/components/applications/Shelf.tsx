@@ -1,492 +1,548 @@
-import ContextMenu from '../ContextMenu';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ArrowDownToLine,
-  Plus,
-  Pencil,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  BookOpen,
-  FolderOpen,
-} from 'lucide-react';
-import Icon from '../Icon';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { BookOpen, LockKeyhole, Search, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { useDesktop } from '../../lib/DesktopContext';
-import { downloadShelf, isSafeImage, shelfFile, shelfRepository } from '../../lib/shelf/repository';
-import type { ShelfItem, ShelfRepository } from '../../lib/shelf/repository';
+import { libraryApi } from '../../lib/library/api';
+import type { LibraryBook, LibraryData, LibraryRepository } from '../../lib/library/types';
+import { shelfRepository, downloadShelf, isSafeImage } from '../../lib/shelf/repository';
+import type { ShelfItem } from '../../lib/shelf/repository';
 import MenuBar from '../MenuBar';
-function useBlobUrl(blob?: Blob) {
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    if (!blob) {
-      setUrl('');
+import LibraryAdmin from '../library/LibraryAdmin';
+import Reader from '../library/Reader';
+import '../../library.css';
+const LibraryScene = lazy(() => import('../library/LibraryScene'));
+const empty: LibraryData = { books: [], shelves: [] };
+export default function Shelf({
+  repository = libraryApi,
+  active = true,
+  visible = true,
+  initialView = 'library',
+}: {
+  repository?: LibraryRepository;
+  active?: boolean;
+  visible?: boolean;
+  initialView?: 'library' | 'archive';
+}) {
+  const { settings, setSettings } = useDesktop();
+  const reduced = settings.reducedMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [data, setData] = useState<LibraryData>(empty),
+    [owner, setOwner] = useState(repository.isOwner()),
+    [mode, setMode] = useState<'library' | 'login' | 'manage' | 'archive'>(initialView);
+  const [loading, setLoading] = useState(repository.configured),
+    [error, setError] = useState(''),
+    [search, setSearch] = useState(''),
+    [genre, setGenre] = useState(''),
+    [sort, setSort] = useState('shelf'),
+    [shelf, setShelf] = useState('');
+  const [selected, setSelected] = useState(''),
+    [hover, setHover] = useState(''),
+    [zoom, setZoom] = useState(1),
+    [reading, setReading] = useState<LibraryBook | null>(null),
+    [indexOpen, setIndexOpen] = useState(false),
+    [page, setPage] = useState(0);
+  const [email, setEmail] = useState(''),
+    [password, setPassword] = useState(''),
+    [signing, setSigning] = useState(false),
+    [archive, setArchive] = useState<ShelfItem[]>([]),
+    [artworkReady, setArtworkReady] = useState(false);
+  const [artworkError, setArtworkError] = useState('');
+  const load = useCallback(async () => {
+    if (!repository.configured) {
+      setLoading(false);
       return;
     }
-    const value = URL.createObjectURL(blob);
-    setUrl(value);
-    return () => URL.revokeObjectURL(value);
-  }, [blob]);
-  return url;
-}
-function Artifact({ item }: { item: ShelfItem }) {
-  const url = useBlobUrl(isSafeImage(item.type) ? item.blob : undefined);
-  return url ? (
-    <div className="shelf-photo">
-      <img src={url} alt={item.name} />
-      <span>{item.name}</span>
-    </div>
-  ) : (
-    <div
-      className={`shelf-object ${item.type === 'application/pdf' ? 'shelf-book' : 'shelf-document'}`}
-    >
-      <Icon name={item.type === 'application/pdf' ? 'certificate' : 'file'} size={42} />
-      <b>{item.name}</b>
-      <small>{item.filename.split('.').pop()?.toUpperCase()}</small>
-    </div>
-  );
-}
-function Viewer({
-  item,
-  close,
-  wallpaper,
-}: {
-  item: ShelfItem;
-  close: () => void;
-  wallpaper: () => void;
-}) {
-  const url = useBlobUrl(item.blob);
-  const [text, setText] = useState('');
-  useEffect(() => {
-    let active = true;
-    if (item.type.startsWith('text/') || /\.(txt|md|csv|log|json)$/i.test(item.filename))
-      void item.blob.text().then((t) => {
-        if (active) setText(t.slice(0, 200000));
-      });
-    return () => {
-      active = false;
-    };
-  }, [item]);
-  return (
-    <div className="shelf-viewer">
-      <header>
-        <div>
-          <b>{item.name}</b>
-          <small>
-            {item.category} · {(item.size / 1024).toFixed(1)} KB
-          </small>
-        </div>
-        <button aria-label="Close item viewer" onClick={close}>
-          <X size={19} />
-        </button>
-      </header>
-      <div className="shelf-view-content">
-        {isSafeImage(item.type) ? (
-          <img src={url} alt={item.description || item.name} />
-        ) : item.type === 'application/pdf' ? (
-          <object type="application/pdf" data={url} aria-label={item.name}>
-            <p>Your browser cannot display this PDF here.</p>
-            <button className="xp-button" onClick={() => downloadShelf(item)}>
-              Download PDF
-            </button>
-          </object>
-        ) : text ? (
-          <pre>{text}</pre>
-        ) : (
-          <div className="shelf-file-fallback">
-            <Icon name="file" size={72} />
-            <h2>{item.filename}</h2>
-            <p>
-              This file is kept safely in your collection.
-              <br />
-              Download it to open it with an appropriate application.
-            </p>
-          </div>
-        )}
-      </div>
-      <footer>
-        <p>{item.description || 'A small piece of your story.'}</p>
-        {isSafeImage(item.type) && (
-          <button className="xp-button" onClick={wallpaper}>
-            Set as wallpaper
-          </button>
-        )}
-        <button className="xp-button" onClick={() => downloadShelf(item)}>
-          <ArrowDownToLine size={13} /> Download
-        </button>
-      </footer>
-    </div>
-  );
-}
-export default function Shelf({ repository = shelfRepository }: { repository?: ShelfRepository }) {
-  const { notify, setSettings } = useDesktop();
-  const [items, setItems] = useState<ShelfItem[]>([]);
-  const [editing, setEditing] = useState(false);
-  const [filter, setFilter] = useState('All objects');
-  const [selected, setSelected] = useState('');
-  const [viewer, setViewer] = useState<ShelfItem | null>(null);
-  const [draft, setDraft] = useState<ShelfItem | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [drop, setDrop] = useState(false);
-  const [dragId, setDragId] = useState('');
-  const [context, setContext] = useState<{ id: string; x: number; y: number } | null>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const load = useCallback(async () => {
+    setError('');
     try {
-      setItems(await repository.list());
-      setError('');
+      const next = await repository.list(repository.isOwner());
+      setData(next);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoading(false);
     }
   }, [repository]);
   useEffect(() => {
     void load();
-    window.addEventListener('pc-shelf-change', load);
-    window.addEventListener('pc-refresh', load);
-    return () => {
-      window.removeEventListener('pc-shelf-change', load);
-      window.removeEventListener('pc-refresh', load);
+    const changed = () => {
+      setOwner(repository.isOwner());
+      if (!repository.isOwner()) {
+        setData(empty);
+        setReading(null);
+        setMode((m) => (m === 'manage' ? 'login' : m));
+      }
+      void load();
     };
-  }, [load]);
-  async function upload(files: FileList | File[]) {
-    if (!editing) {
-      notify('Choose Arrange collection to add your own objects.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const all = Array.from(files);
-      for (let i = 0; i < all.length; i++)
-        await repository.put(shelfFile(all[i], items.length + i));
-      await load();
-      notify(`${all.length} object${all.length === 1 ? '' : 's'} added to your shelf.`);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function remove(item: ShelfItem) {
-    if (!window.confirm(`Remove “${item.name}” from this browser’s collection?`)) return;
-    try {
-      await repository.remove(item.id);
-      if (viewer?.id === item.id) setViewer(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function reorder(id: string, target: string) {
-    const ids = items.map((i) => i.id);
-    const from = ids.indexOf(id),
-      to = ids.indexOf(target);
-    if (from < 0 || to < 0 || from === to) return;
-    ids.splice(from, 1);
-    ids.splice(to, 0, id);
-    try {
-      await repository.reorder(ids);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-    setDragId('');
-  }
-  const categories = ['All objects', ...new Set(items.map((i) => i.category))];
-  const visible = items.filter((i) => filter === 'All objects' || i.category === filter);
-  const current = items.find((i) => i.id === context?.id);
-  const wallpaper = (item: ShelfItem) => {
-    setSettings({ wallpaper: 'custom', customWallpaper: item.id });
-    notify('Your desktop has a new view.');
+    window.addEventListener('library-change', changed);
+    window.addEventListener('pc-refresh', changed);
+    return () => {
+      window.removeEventListener('library-change', changed);
+      window.removeEventListener('pc-refresh', changed);
+    };
+  }, [load, repository]);
+  useEffect(() => {
+    if (!active) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        if (reading) setReading(null);
+        else if (selected) {
+          setSelected('');
+          setZoom(1);
+        } else if (mode !== 'library') setMode('library');
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [active, selected, reading, mode]);
+  const books = data.books
+    .filter(
+      (b) =>
+        b.published &&
+        (!shelf || b.shelfId === shelf) &&
+        (!genre || b.genre === genre) &&
+        `${b.title} ${b.author}`.toLowerCase().includes(search.toLowerCase()),
+    )
+    .sort((a, b) =>
+      sort === 'title'
+        ? a.title.localeCompare(b.title)
+        : sort === 'author'
+          ? a.author.localeCompare(b.author)
+          : sort === 'year'
+            ? (b.year || 0) - (a.year || 0)
+            : a.position - b.position,
+    );
+  const pageSize = innerWidth < 700 ? 16 : 48;
+  const pageBooks = books.slice(page * pageSize, (page + 1) * pageSize);
+  const current = data.books.find((b) => b.id === selected && b.published);
+  const displayedShelves = data.shelves.filter((s) => !shelf || s.id === shelf);
+  useEffect(() => {
+    setPage(0);
+    setSelected('');
+    setZoom(1);
+  }, [search, genre, sort, shelf, pageSize]);
+  useEffect(() => {
+    if (initialView === 'archive')
+      void shelfRepository
+        .list()
+        .then(setArchive)
+        .catch((e) => setError(e.message));
+  }, [initialView]);
+  const inspect = (id: string) => {
+    setSelected(id);
+    setZoom(1);
+    setArtworkReady(false);
+    setArtworkError('');
   };
+  const ownerAccess = () => {
+    setError('');
+    setMode(repository.isOwner() ? 'manage' : 'login');
+  };
+  async function localArchive() {
+    setMode('archive');
+    try {
+      setArchive(await shelfRepository.list());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   return (
-    <div
-      className={`shelf-app app-column ${busy ? 'is-busy' : ''}`}
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) {
-          e.preventDefault();
-          setDrop(true);
-        }
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(false);
-      }}
-      onDrop={(e) => {
-        if (e.dataTransfer.files.length) {
-          e.preventDefault();
-          setDrop(false);
-          void upload(e.dataTransfer.files);
-        }
-      }}
-    >
+    <div className="shelf-app library-app app-column">
       <MenuBar
         menus={[
           {
-            label: 'Collection',
+            label: 'Library',
             items: [
-              { label: 'Arrange collection', checked: editing, action: () => setEditing(!editing) },
-              { label: 'Add objects…', disabled: !editing, action: () => input.current?.click() },
+              { label: 'Browse books', action: () => setMode('library') },
               { label: 'Refresh', action: () => void load() },
+              { label: 'Book index', checked: indexOpen, action: () => setIndexOpen(!indexOpen) },
+              { label: 'Local collection archive', action: () => void localArchive() },
             ],
           },
           {
-            label: 'Help',
+            label: 'Owner',
             items: [
-              {
-                label: 'About this collection',
-                action: () =>
-                  notify(
-                    'Objects are stored in IndexedDB on this browser. Arrange collection lets you add and edit them. A shared online collection needs a connected backend; local objects are not published to other visitors.',
-                  ),
-              },
+              { label: owner ? 'Manage library' : 'Owner sign in', action: ownerAccess },
+              ...(owner
+                ? [
+                    {
+                      label: 'Sign out',
+                      action: () => void repository.logout().catch((e) => setError(e.message)),
+                    },
+                  ]
+                : []),
             ],
           },
         ]}
       />
-      <header className="shelf-heading">
-        <div>
-          <span className="eyebrow">A FEW THINGS WORTH KEEPING</span>
-          <h1>The personal shelf.</h1>
-          <p>Small memories. Favorite things. A story in objects.</p>
-        </div>
-        <BookOpen size={36} />
-      </header>
-      <div className="shelf-tools">
-        <select
-          aria-label="Shelf category"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          {categories.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </select>
-        <button
-          className={`xp-button ${editing ? 'pressed' : ''}`}
-          onClick={() => setEditing(!editing)}
-        >
-          <Pencil size={12} />
-          {editing ? 'Done arranging' : 'Arrange collection'}
-        </button>
-        {editing && (
-          <button className="xp-button" onClick={() => input.current?.click()}>
-            <Plus size={13} />
-            Add objects
-          </button>
-        )}
-        <input
-          type="file"
-          ref={input}
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files) void upload(e.target.files);
-            e.target.value = '';
+      {mode === 'manage' && owner ? (
+        <LibraryAdmin
+          data={data}
+          repository={repository}
+          reduced={reduced}
+          reload={load}
+          onBack={() => {
+            setMode('library');
+            void load();
           }}
         />
-      </div>
-      {editing && (
-        <div className="shelf-local-note">
-          This browser’s collection · drag to reorder, or use the arrow buttons. Files stay on this
-          device.
-        </div>
-      )}
-      {error && (
-        <div className="app-inline-error" role="alert">
-          {error}
-          <button onClick={() => void load()}>Retry</button>
-        </div>
-      )}
-      <div className={`shelf-room ${drop ? 'drop-active' : ''}`}>
-        <div className="shelf-objects">
-          {visible.map((item) => (
-            <div
-              className={`shelf-slot ${selected === item.id ? 'selected' : ''} ${dragId === item.id ? 'dragging' : ''}`}
-              key={item.id}
-              draggable={editing}
-              onDragStart={(e) => {
-                setDragId(item.id);
-                e.dataTransfer.setData('application/x-shelf-item', item.id);
-                e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragEnd={() => setDragId('')}
-              onDragOver={(e) => {
-                if (editing && e.dataTransfer.types.includes('application/x-shelf-item'))
-                  e.preventDefault();
-              }}
-              onDrop={(e) => {
-                const id = e.dataTransfer.getData('application/x-shelf-item');
-                if (id) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void reorder(id, item.id);
+      ) : mode === 'login' || (mode === 'manage' && !owner) ? (
+        <section className="library-signin">
+          <span className="library-kicker">PRIVATE / LIBRARIAN’S DESK</span>
+          <LockKeyhole size={30} />
+          <h1>
+            For the keeper
+            <br />
+            of the library.
+          </h1>
+          {repository.configured ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSigning(true);
+                setError('');
+                try {
+                  await repository.login(email, password);
+                  setPassword('');
+                  setOwner(true);
+                  await load();
+                  setMode('manage');
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setSigning(false);
                 }
               }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setContext({
-                  id: item.id,
-                  x: Math.max(4, Math.min(e.clientX, innerWidth - 215)),
-                  y: Math.max(4, Math.min(e.clientY, innerHeight - 255)),
-                });
-              }}
             >
-              <button
-                className="shelf-artifact"
-                onClick={() => {
-                  setSelected(item.id);
-                  setViewer(item);
-                }}
-              >
-                <Artifact item={item} />
+              <label>
+                Owner email
+                <input
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  maxLength={256}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              <button className="xp-button" disabled={signing}>
+                {signing ? 'Signing in…' : 'Sign in'}
               </button>
-              <span className="shelf-label">{item.name}</span>
-              {editing && (
-                <div className="shelf-item-actions">
+            </form>
+          ) : (
+            <div className="library-setup-note">
+              <p>The private library service has not been connected yet.</p>
+              <p>
+                Deploy the included backend, configure your owner account and private storage, then
+                set the frontend’s <code>VITE_LIBRARY_API_URL</code>. Setup instructions are in{' '}
+                <code>docs/library-deployment.md</code>.
+              </p>
+              <p>Uploads and editing stay disabled until that service is available.</p>
+            </div>
+          )}
+          {error && (
+            <p className="library-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="library-text-button" onClick={() => setMode('library')}>
+            ← Return to the library
+          </button>
+        </section>
+      ) : mode === 'archive' ? (
+        <section className="library-archive">
+          <h2>Your previous local collection.</h2>
+          <p>
+            These files remain on this device. Download originals here; the shared library does not
+            publish or modify them.
+          </p>
+          <button className="xp-button" onClick={() => setMode('library')}>
+            Return to library
+          </button>
+          {archive.map((item) => (
+            <div key={item.id}>
+              <span>
+                {item.name} <small>{item.filename}</small>
+              </span>
+              <div>
+                {isSafeImage(item.type) && (
                   <button
-                    aria-label={`Move ${item.name} left`}
-                    disabled={items.indexOf(item) === 0}
-                    onClick={() => void reorder(item.id, items[items.indexOf(item) - 1].id)}
+                    className="xp-button"
+                    onClick={() => setSettings({ wallpaper: 'custom', customWallpaper: item.id })}
                   >
-                    <ChevronLeft size={14} />
+                    Set as wallpaper
                   </button>
-                  <button aria-label={`Edit ${item.name}`} onClick={() => setDraft({ ...item })}>
-                    <Pencil size={12} />
-                  </button>
-                  <button aria-label={`Delete ${item.name}`} onClick={() => void remove(item)}>
-                    <X size={13} />
-                  </button>
-                  <button
-                    aria-label={`Move ${item.name} right`}
-                    disabled={items.indexOf(item) === items.length - 1}
-                    onClick={() => void reorder(item.id, items[items.indexOf(item) + 1].id)}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              )}
+                )}
+                <button className="xp-button" onClick={() => downloadShelf(item)}>
+                  Download
+                </button>
+              </div>
             </div>
           ))}
-        </div>
-        {visible.length === 0 && (
-          <div className="empty-shelf">
-            <div className="shelf-empty-frame">
-              <Icon name="certificate" size={58} />
+          {!archive.length && <p>No saved objects in this browser.</p>}
+        </section>
+      ) : (
+        <>
+          <header className="library-heading">
+            <div>
+              <span className="library-kicker">A PERSONAL COLLECTION · EST. 2004</span>
+              <h1>
+                The reading room<span>.</span>
+              </h1>
+              <p>Good books. Quiet discoveries. A little time of your own.</p>
             </div>
-            <h2>A little room for your story.</h2>
-            <p>
-              {items.length
-                ? 'No objects in this category.'
-                : 'The shelf is waiting for its first keepsake.'}
-            </p>
-            <button
-              onClick={() => {
-                setEditing(true);
-                input.current?.click();
-              }}
+            <BookOpen size={37} />
+          </header>
+          <div className="library-toolbar">
+            <label className="library-search">
+              <Search size={14} />
+              <input
+                aria-label="Search books"
+                placeholder="Find a title or an author…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <select
+              aria-label="Filter genre"
+              value={genre}
+              onChange={(e) => setGenre(e.target.value)}
             >
-              Add your first object <Plus size={12} />
-            </button>
-          </div>
-        )}
-        {drop && (
-          <div className="shelf-drop-message">
-            <FolderOpen size={35} />
-            {editing ? 'Drop your keepsakes here' : 'Choose Arrange collection first'}
-          </div>
-        )}
-      </div>
-      <footer className="status-bar">
-        <span>
-          {items.length} objects · {busy ? 'Saving…' : 'Collection ready'}
-        </span>
-        <span>Local collection</span>
-      </footer>
-      {viewer && (
-        <Viewer item={viewer} close={() => setViewer(null)} wallpaper={() => wallpaper(viewer)} />
-      )}
-      {draft && (
-        <div className="app-modal-backdrop">
-          <form
-            className="app-modal shelf-edit"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              try {
-                await repository.put({
-                  ...draft,
-                  name: draft.name.trim() || draft.filename,
-                  category: draft.category.trim() || 'Artifacts',
-                });
-                setDraft(null);
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <h3>Edit object</h3>
-            <label>
-              Name
-              <input
-                required
-                maxLength={100}
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              />
-            </label>
-            <label>
-              Description
-              <textarea
-                maxLength={2000}
-                value={draft.description}
-                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              />
-            </label>
-            <label>
-              Category
-              <input
-                maxLength={60}
-                value={draft.category}
-                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-              />
-            </label>
-            <button className="xp-button" disabled={busy}>
-              Save object
-            </button>
-            <button type="button" className="xp-button" onClick={() => setDraft(null)}>
-              Cancel
-            </button>
-          </form>
-        </div>
-      )}
-      {context && current && (
-        <ContextMenu
-          x={context.x}
-          y={context.y}
-          onClose={() => setContext(null)}
-          items={[
-            { label: 'Open', action: () => setViewer(current) },
-            { label: 'Download', action: () => downloadShelf(current) },
-            ...(isSafeImage(current.type)
-              ? [{ label: 'Set as wallpaper', action: () => wallpaper(current) }]
-              : []),
-            {
-              label: 'Edit details',
-              action: () => {
-                setEditing(true);
-                setDraft({ ...current });
-              },
-            },
-            { label: 'Delete', action: () => void remove(current) },
-            {
-              label: 'Properties',
-              action: () =>
-                notify(
-                  `${current.filename}\n${current.type}\n${current.size.toLocaleString()} bytes\nAdded ${new Date(current.createdAt).toLocaleDateString()}`,
+              <option value="">Every genre</option>
+              {[
+                ...new Set(
+                  data.books
+                    .filter((b) => b.published)
+                    .map((b) => b.genre)
+                    .filter(Boolean),
                 ),
-            },
-          ]}
-        />
+              ].map((g) => (
+                <option key={g}>{g}</option>
+              ))}
+            </select>
+            <select aria-label="Sort books" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="shelf">Shelf order</option>
+              <option value="title">Title A–Z</option>
+              <option value="author">Author A–Z</option>
+              <option value="year">Newest edition</option>
+            </select>
+            <button
+              className="xp-button"
+              aria-pressed={indexOpen}
+              onClick={() => setIndexOpen(!indexOpen)}
+            >
+              Index
+            </button>
+          </div>
+          {error && (
+            <div className="library-error" role="alert">
+              {error}
+              <button onClick={() => void load()}>Retry</button>
+            </div>
+          )}
+          <div className={`library-room ${current ? 'inspecting' : ''}`}>
+            <div className="library-scene-area">
+              {visible && (
+                <Suspense
+                  fallback={<div className="library-loading">Preparing the reading room…</div>}
+                >
+                  <LibraryScene
+                    books={pageBooks}
+                    shelves={displayedShelves}
+                    selected={current?.id || ''}
+                    onSelect={inspect}
+                    repository={repository}
+                    reduced={reduced}
+                    zoom={zoom}
+                    onHover={setHover}
+                    onArtworkReady={setArtworkReady}
+                    onArtworkError={setArtworkError}
+                  />
+                </Suspense>
+              )}
+              {!loading && !books.length && (
+                <div className="library-empty">
+                  <span className="library-kicker">ROOM FOR WHAT COMES NEXT</span>
+                  <h2>
+                    {search || genre
+                      ? 'Nothing on this shelf.'
+                      : 'Every library begins\nwith one good book.'}
+                  </h2>
+                  <p>
+                    {search || genre
+                      ? 'Try another title, author, or genre.'
+                      : repository.configured
+                        ? 'The first editions are still being gathered. Come back soon.'
+                        : 'The collection is being prepared. The shelves will open soon.'}
+                  </p>
+                </div>
+              )}
+              <div className="library-scene-top">
+                <select
+                  aria-label="Choose shelf"
+                  value={shelf}
+                  onChange={(e) => setShelf(e.target.value)}
+                >
+                  <option value="">All shelves</option>
+                  {data.shelves.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <span>
+                  {loading
+                    ? 'Opening library…'
+                    : hover || `${books.length} ${books.length === 1 ? 'edition' : 'editions'}`}
+                </span>
+              </div>
+              <div className="library-camera">
+                <button
+                  aria-label="Zoom in on library"
+                  onClick={() => setZoom((z) => Math.max(0.55, z - 0.15))}
+                >
+                  <ZoomIn size={17} />
+                </button>
+                <button
+                  aria-label="Zoom out of library"
+                  onClick={() => setZoom((z) => Math.min(1.65, z + 0.15))}
+                >
+                  <ZoomOut size={17} />
+                </button>
+                <button
+                  aria-label="Reset library view"
+                  onClick={() => {
+                    setSelected('');
+                    setZoom(1);
+                  }}
+                >
+                  <RotateCcw size={16} />
+                </button>
+              </div>
+              <div className="library-scene-hint">
+                {current
+                  ? 'Drag to turn · pinch or scroll to zoom'
+                  : 'Choose a spine. See where it takes you.'}
+              </div>
+            </div>
+            {current && (
+              <aside
+                className="library-book-details"
+                aria-label="Book details"
+                data-artwork-ready={artworkReady}
+              >
+                <button
+                  className="library-return"
+                  onClick={() => {
+                    setSelected('');
+                    setZoom(1);
+                  }}
+                >
+                  <X size={14} />
+                  Return to shelf
+                </button>
+                <span className="library-kicker">{current.genre || 'FROM THE COLLECTION'}</span>
+                <h2>{current.title}</h2>
+                <p className="library-author">by {current.author}</p>
+                <p className="library-description">
+                  {current.description || 'An edition from the personal collection.'}
+                </p>
+                <dl>
+                  {current.year && (
+                    <>
+                      <dt>Published</dt>
+                      <dd>{current.year}</dd>
+                    </>
+                  )}
+                  {current.isbn && (
+                    <>
+                      <dt>Edition</dt>
+                      <dd>{current.isbn}</dd>
+                    </>
+                  )}
+                  <dt>Shelf</dt>
+                  <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name}</dd>
+                </dl>
+                {artworkError && (
+                  <p role="alert" className="library-binding-note">
+                    {artworkError}
+                  </p>
+                )}
+                <p className="library-binding-note">
+                  {!current.spine ? 'Generated spine design. ' : ''}
+                  {!current.back ? 'Generated back design.' : ''}
+                </p>
+                {current.canRead ? (
+                  <button className="library-read-button" onClick={() => setReading(current)}>
+                    <BookOpen size={16} />
+                    Read {current.digital?.mime === 'application/pdf' ? 'PDF' : 'EPUB'} edition →
+                  </button>
+                ) : (
+                  <p className="library-unavailable">No public reading edition is available.</p>
+                )}
+              </aside>
+            )}
+          </div>
+          {(indexOpen || books.length > 0) && (
+            <div className={`library-index ${indexOpen ? 'expanded' : ''}`} aria-label="Book index">
+              {pageBooks.map((book) => (
+                <button
+                  key={book.id}
+                  aria-pressed={selected === book.id}
+                  onClick={() => inspect(book.id)}
+                >
+                  <i style={{ background: book.color }} />
+                  <span>
+                    {book.title}
+                    <small>{book.author}</small>
+                  </span>
+                </button>
+              ))}
+              {books.length > pageSize && (
+                <nav>
+                  <button
+                    disabled={!page}
+                    onClick={() => {
+                      setPage((p) => p - 1);
+                      setSelected('');
+                    }}
+                  >
+                    Previous shelf page
+                  </button>
+                  <span>
+                    {page + 1} / {Math.ceil(books.length / pageSize)}
+                  </span>
+                  <button
+                    disabled={(page + 1) * pageSize >= books.length}
+                    onClick={() => {
+                      setPage((p) => p + 1);
+                      setSelected('');
+                    }}
+                  >
+                    Next shelf page
+                  </button>
+                </nav>
+              )}
+            </div>
+          )}
+          <footer className="library-footer">
+            <span>Collected with care. Read at your own pace.</span>
+            <button onClick={ownerAccess}>
+              <LockKeyhole size={11} />
+              {owner ? 'Librarian’s desk' : 'Owner access'}
+            </button>
+          </footer>
+        </>
+      )}
+      {reading && (
+        <Reader book={reading} repository={repository} onClose={() => setReading(null)} />
       )}
     </div>
   );

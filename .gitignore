@@ -6,3 +6,8 @@ test-results/
 .DS_Store
 
 *.tsbuildinfo
+.env
+.env.*
+!.env.example
+!server/.env.example
+server/coverage/
