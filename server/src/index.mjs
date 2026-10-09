@@ -1,11 +1,11 @@
 import { Pool } from 'pg';
 import { S3Client, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
-import { readFile } from 'node:fs/promises';
+import { migrate } from './migrations.mjs';
 import { configuration } from './config.mjs';
 import { createApp } from './app.mjs';
 const config = configuration();
 const db = new Pool({ connectionString: config.databaseUrl, max: 10 });
-await db.query(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
+await migrate(db);
 const s3 = new S3Client({
   region: config.region,
   endpoint: config.endpoint,

@@ -5,6 +5,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as Orbit } from 'three-stdlib';
 import BookModel from './BookModel';
+import { footprint } from '../../lib/library/registry';
 import type { LibraryBook, LibraryRepository, LibraryShelf } from '../../lib/library/types';
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
@@ -47,7 +48,9 @@ function Rig({
   zoom,
   reduced,
   orbitRef,
+  extent = 3,
 }: {
+  extent?: number;
   selected: boolean;
   target: THREE.Vector3;
   zoom: number;
@@ -60,11 +63,13 @@ function Rig({
   const destination = useMemo(
     () =>
       new THREE.Vector3(
-        selected ? 0 : 1,
+        selected ? 1.5 : 1,
         target.y + (selected ? 0.2 : 0.8),
-        selected ? target.z + 6 : Math.max(14, target.y * 3.4, (14 * size.height) / size.width),
+        selected
+          ? target.z + Math.max(6, extent * 1.7, ((extent * size.height) / size.width) * 1.5)
+          : Math.max(14, target.y * 3.4, (14 * size.height) / size.width),
       ),
-    [selected, target, size.width, size.height],
+    [selected, target, size.width, size.height, extent],
   );
   useEffect(() => {
     animate.current = true;
@@ -102,11 +107,22 @@ function Room({
   onHover,
   onArtworkReady,
   onArtworkError,
+  autoRotate,
+  resetKey,
 }: SceneProps) {
   const texture = useMemo(woodTexture, []);
   useEffect(() => () => texture.dispose(), [texture]);
   const orbit = useRef<Orbit>(null);
   const [hovered, setHovered] = useState('');
+  const [isolated, setIsolated] = useState(false);
+  useEffect(() => {
+    if (!selected) {
+      setIsolated(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsolated(true), reduced ? 0 : 350);
+    return () => clearTimeout(timer);
+  }, [selected, reduced]);
   // Each overflow row is another physical shelf, never overlapping book geometry.
   const rows = useMemo(() => {
     const result: { shelf: LibraryShelf; books: LibraryBook[] }[] = [];
@@ -117,30 +133,30 @@ function Room({
       let row: LibraryBook[] = [],
         used = 0;
       for (const b of items) {
-        if (used + b.thickness + 0.2 > 10.4 && row.length) {
+        if (used + footprint(b).width + 0.3 > 10.4 && row.length) {
           result.push({ shelf, books: row });
           row = [];
           used = 0;
         }
         row.push(b);
-        used += b.thickness + 0.2;
+        used += footprint(b).width + 0.3;
       }
       result.push({ shelf, books: row });
     }
     return result;
   }, [books, shelves]);
-  const count = Math.max(2, rows.length),
-    height = count * 4.1 + 0.3;
-  const selectedRow = rows.findIndex((row) => row.books.some((b) => b.id === selected));
+  const count = Math.max(2, rows.length);
+  const rowHeights = Array.from({ length: count }, (_, i) =>
+    Math.max(3.6, ...(rows[i]?.books || []).map((b) => footprint(b).height + 0.5)),
+  );
+  const height = rowHeights.reduce((a, b) => a + b, 0);
+  const bottoms = rowHeights.map((_, i) => rowHeights.slice(i + 1).reduce((a, b) => a + b, 0));
+  const depth = Math.max(2.6, ...books.map((b) => footprint(b).depth + 0.4));
+
   const inspected = books.find((b) => b.id === selected);
   const target = useMemo(
-    () =>
-      new THREE.Vector3(
-        0,
-        inspected ? (count - 1 - selectedRow) * 4.1 + inspected.height / 2 + 0.18 : height / 2,
-        inspected ? 3.4 : 0,
-      ),
-    [inspected, selectedRow, height, count],
+    () => new THREE.Vector3(0, inspected ? 2 : height / 2, inspected ? 5 : 0),
+    [inspected, height, count, resetKey],
   );
   function timber(
     key: string,
@@ -156,7 +172,7 @@ function Room({
   }
   return (
     <>
-      <color attach="background" args={['#e7dfcc']} />
+      <color attach="background" args={[isolated ? '#e4e6e0' : '#e7dfcc']} />
       <fog attach="fog" args={['#e7dfcc', 28, 65]} />
       <ambientLight intensity={1.1} />
       <hemisphereLight args={['#fff5d9', '#6b5544', 1.5]} />
@@ -172,49 +188,64 @@ function Room({
         shadow-bias={-0.001}
       />
       <pointLight position={[7, 7, 6]} intensity={40} color="#fff0c6" />
-      <mesh position={[0, -0.32, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh
+        position={[
+          0,
+          isolated
+            ? 2 - ((inspected?.height || 3) * (inspected?.presentation?.scale || 1)) / 2 - 0.08
+            : -0.32,
+          0,
+        ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[100, 100]} />
         <meshStandardMaterial color="#c8beaa" roughness={1} />
       </mesh>
-      {timber('back', [0, height / 2, -1.15], [11.7, height + 0.3, 0.16])}
-      {[-5.85, 5.85].map((x) =>
-        timber(String(x), [x, height / 2, -0.12], [0.22, height + 0.5, 2.25]),
-      )}
-      {Array.from({ length: count + 1 }, (_, i) =>
-        timber('row' + i, [0, i * 4.1, 0], [11.8, 0.22, 2.6]),
-      )}
+      <group visible={!isolated} name="collection-shelves">
+        {timber('back', [0, height / 2, -depth / 2], [11.7, height + 0.3, 0.16])}
+        {[-5.85, 5.85].map((x) =>
+          timber(String(x), [x, height / 2, 0], [0.22, height + 0.5, depth]),
+        )}
+        {Array.from({ length: count + 1 }, (_, i) =>
+          timber('row' + i, [0, i === count ? height : bottoms[i], 0], [11.8, 0.22, depth]),
+        )}
+      </group>
       {rows.map((row, i) => {
         let x = -5.1;
         return row.books.map((book) => {
-          const current = x + book.thickness / 2;
-          x += book.thickness + 0.2;
+          const current = x + footprint(book).width / 2;
+          x += footprint(book).width + 0.3;
           return (
-            <BookModel
-              key={book.id}
-              book={book}
-              repository={repository}
-              position={[current, (count - 1 - i) * 4.1 + book.height / 2 + 0.14, 0.02]}
-              rotation={Math.PI / 2}
-              selected={selected === book.id}
-              hovered={hovered === book.id}
-              reduced={reduced}
-              onSelect={() => onSelect(book.id)}
-              onHover={(value) => {
-                setHovered(value ? book.id : '');
-                onHover?.(value ? book.title : '');
-              }}
-              onReady={selected === book.id ? onArtworkReady : undefined}
-              onError={selected === book.id ? onArtworkError : undefined}
-            />
+            <group key={book.id} visible={!isolated || book.id === selected}>
+              <BookModel
+                book={book}
+                repository={repository}
+                position={[current, bottoms[i] + footprint(book).height / 2 + 0.14, 0.02]}
+                rotation={footprint(book).rotation}
+                selected={selected === book.id}
+                hovered={hovered === book.id}
+                reduced={reduced}
+                onSelect={() => onSelect(book.id)}
+                onHover={(value) => {
+                  setHovered(value ? book.id : '');
+                  onHover?.(value ? book.title : '');
+                }}
+                onReady={selected === book.id ? onArtworkReady : undefined}
+                onError={selected === book.id ? onArtworkError : undefined}
+              />
+            </group>
           );
         });
       })}
       <OrbitControls
         ref={orbit}
         makeDefault
+        autoRotate={Boolean(selected && autoRotate && !reduced)}
+        autoRotateSpeed={0.8}
         enablePan={!selected}
         minDistance={3}
-        maxDistance={34}
+        maxDistance={Math.max(34, height * 3)}
         minPolarAngle={0.55}
         maxPolarAngle={1.65}
         minAzimuthAngle={selected ? -Infinity : -0.6}
@@ -223,6 +254,11 @@ function Room({
         dampingFactor={0.12}
       />
       <Rig
+        extent={
+          inspected
+            ? Math.max(inspected.width, inspected.height) * (inspected.presentation?.scale || 1)
+            : 3
+        }
         selected={Boolean(selected)}
         target={target}
         zoom={zoom}
@@ -243,6 +279,8 @@ interface SceneProps {
   onHover?: (title: string) => void;
   onArtworkReady?: (ready: boolean) => void;
   onArtworkError?: (error: string) => void;
+  autoRotate?: boolean;
+  resetKey?: number;
 }
 export default function LibraryScene(props: SceneProps) {
   const [available] = useState(() => {
@@ -258,6 +296,14 @@ export default function LibraryScene(props: SceneProps) {
   });
   const [ready, setReady] = useState(false);
   const [lost, setLost] = useState(false);
+  useEffect(() => {
+    if ((!available || lost) && props.selected) {
+      props.onArtworkReady?.(false);
+      props.onArtworkError?.(
+        '3D is unavailable on this device. Details and documents remain available.',
+      );
+    }
+  }, [available, lost, props.selected, props.onArtworkReady, props.onArtworkError]);
   const fallback = (
     <div className="library-webgl-fallback">
       <span>READING ROOM</span>
@@ -275,6 +321,7 @@ export default function LibraryScene(props: SceneProps) {
         className="library-canvas"
         data-renderer="three-webgl"
         data-ready={ready}
+        data-presentation={props.selected ? 'standalone' : 'shelves'}
         aria-label="Interactive 3D wooden bookshelf"
       >
         {!ready && <div className="library-loading">Opening the reading room…</div>}
@@ -301,7 +348,11 @@ export function BookPreview({
   book,
   repository,
   reduced,
+  background = '#ded5c0',
+  light = 3,
 }: {
+  background?: string;
+  light?: number;
   book: LibraryBook;
   repository: LibraryRepository;
   reduced: boolean;
@@ -312,9 +363,9 @@ export function BookPreview({
     <SceneBoundary fallback={<p>3D preview is unavailable on this device.</p>}>
       <div className="book-preview" data-textures-ready={ready}>
         <Canvas frameloop="demand" dpr={[1, 1.5]} camera={{ position: [2, 0.6, 5], fov: 40 }}>
-          <color attach="background" args={['#ded5c0']} />
+          <color attach="background" args={[background]} />
           <ambientLight intensity={1.8} />
-          <directionalLight position={[-4, 6, 5]} intensity={3} />
+          <directionalLight position={[-4, 6, 5]} intensity={light} />
           <BookModel
             book={book}
             repository={repository}
@@ -323,7 +374,7 @@ export function BookPreview({
             onReady={setReady}
             onError={setError}
           />
-          <OrbitControls enablePan={false} minDistance={3} maxDistance={8} />
+          <OrbitControls enablePan={false} minDistance={2} maxDistance={14} />
         </Canvas>
         <small>
           {error || (ready ? 'Drag to turn · scroll to zoom' : 'Preparing cover textures…')}

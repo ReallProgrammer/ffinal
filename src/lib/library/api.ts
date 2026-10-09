@@ -9,6 +9,9 @@ export function bookInput(book: LibraryBook): BookInput {
     id: _id,
     position: _position,
     updatedAt: _updated,
+    createdAt: _created,
+    category: _category,
+    model,
     canRead: _read,
     front,
     spine,
@@ -18,6 +21,7 @@ export function bookInput(book: LibraryBook): BookInput {
   } = book;
   return {
     ...metadata,
+    model: model?.id || null,
     front: front?.id || null,
     spine: spine?.id || null,
     back: back?.id || null,
@@ -56,7 +60,7 @@ export const libraryApi: LibraryRepository = {
   configured: Boolean(base),
   isOwner: () => Boolean(token),
   async list(owner = false) {
-    return (await request(owner ? '/admin/library' : '/library')).json();
+    return (await request(owner ? '/admin/collection' : '/collection')).json();
   },
   async login(email, password) {
     const result = await (
@@ -110,12 +114,20 @@ export const libraryApi: LibraryRepository = {
   async texture(id, signal) {
     return (await request(`/assets/${encodeURIComponent(id)}`, { signal })).blob();
   },
+  async original(id) {
+    return (await request(`/assets/${id}?original=1`)).blob();
+  },
+  async crop(id, crop) {
+    return (
+      await request(`/admin/assets/${id}/crop`, { method: 'POST', body: JSON.stringify(crop) })
+    ).json();
+  },
   async read(book) {
     return (await request(`/books/${book.id}/read`)).blob();
   },
   async save(book) {
     const response = await mutation(
-      book.id ? `/admin/books/${book.id}` : '/admin/books',
+      book.id ? `/admin/items/${book.id}` : '/admin/items',
       book.id ? 'PUT' : 'POST',
       bookInput(book),
     );

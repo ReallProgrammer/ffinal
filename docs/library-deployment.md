@@ -1,6 +1,6 @@
 # Deploy the personal 3D library
 
-The frontend and backend deploy independently. GitHub Pages hosts the existing OS and the 3D client. A Node.js service hosts the API; PostgreSQL stores metadata and hashed owner sessions; a private S3-compatible bucket stores originals and textures. **No production backend is connected yet.** Until configured, the public app displays an empty reading room, and its owner panel explains setup without offering a bypass login or local publishing.
+The frontend and backend deploy independently. GitHub Pages hosts the existing OS and the 3D client. A Node.js service hosts the API; PostgreSQL stores metadata and hashed owner sessions; a private S3-compatible bucket stores originals and textures. The owner has configured Render with Supabase PostgreSQL and private storage. For the multi-format upgrade, follow [Collection Room deployment](collection-deployment.md) before publishing the frontend. A fresh installation without an API shows a setup state; it never provides a bypass login or local publishing.
 
 For a fresh setup with one provider, follow the [Railway walkthrough](library-railway.md).
 
@@ -88,6 +88,6 @@ Server checks cover unauthorized writes, forged sessions, file validation, hidde
 
 ## Rendering and preservation
 
-Books are real Three.js meshes, with separate cover boards, page blocks, spine faces, and independent textures. The scene is lazy-loaded only when needed, renders on demand, limits pixel density, and displays up to 48 books per shelf page (16 on mobile). Overview textures use half resolution; selected books use detailed textures. Minimized windows release their scene, and closed windows dispose textures and geometries. Reduced motion skips camera/book easing. If WebGL is unavailable, the readable book index and detail/reading views remain usable; it never pretends a flat card is a 3D model.
+Books are real Three.js meshes, with separate cover boards, page blocks, spine faces, and independent textures. The scene is lazy-loaded only when needed, renders on demand, limits pixel density, and displays up to 16 collection objects per shelf page (8 on mobile). Optimized textures are prepared before revealing the complete object and reused during inspection; original high-resolution images are not loaded into the public scene. Minimized windows release their scene, and unused cached textures and geometries are released after a short retention window. Reduced motion skips camera/book easing. If WebGL is unavailable, the readable book index and detail/reading views remain usable; it never pretends a flat card is a 3D model.
 
 The old IndexedDB collection is preserved as **Library → Local collection archive**. It is a read-only download archive, with saved local images still usable as wallpapers. It is not silently uploaded or published. The production library's source of truth is PostgreSQL plus private object storage, not localStorage or IndexedDB.

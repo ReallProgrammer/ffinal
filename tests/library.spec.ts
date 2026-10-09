@@ -19,7 +19,7 @@ test('public library preserves OS controls and offers no editing or upload field
   await expect(page.locator('.library-app input[type=file]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add book', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Index', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Search books' }).fill('No such edition');
+  await page.getByRole('textbox', { name: 'Search collection' }).fill('No such edition');
   await expect(page.locator('.library-empty')).toContainText('Nothing on this shelf');
   await page
     .locator('[data-app="shelf"]')
@@ -78,7 +78,11 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     createdShelf = (
       await (await context.request.get(api + '/admin/library', { headers })).json()
     ).shelves.find((s: { name: string }) => s.name === shelfName).id;
-    await page.getByRole('button', { name: '＋ Add book', exact: true }).click();
+    await page.getByRole('button', { name: '＋ Add to Collection', exact: true }).click();
+    await page
+      .locator('.collection-type-grid')
+      .getByRole('button', { name: /^Book / })
+      .click();
     await page.getByLabel('Title', { exact: true }).fill(title);
     await page.getByLabel('Author', { exact: true }).fill('Workflow test author');
     await page
@@ -107,13 +111,14 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     createdBook = saved.id;
     createdShelf = saved.shelfId;
     assets.push(saved.front.id, saved.digital.id);
-    await page.getByRole('button', { name: 'Public library', exact: true }).click();
+    await page.getByRole('button', { name: 'Public collection', exact: true }).click();
+    await page.getByRole('button', { name: 'All Collections', exact: true }).click();
     await page.getByRole('combobox', { name: 'Choose shelf' }).selectOption(createdShelf);
     await page
       .locator('.library-index')
       .getByRole('button', { name: new RegExp(title) })
       .click();
-    await expect(page.getByRole('complementary', { name: 'Book details' })).toContainText(title);
+    await expect(page.getByRole('complementary', { name: 'Object details' })).toContainText(title);
     await expect(page.locator('.library-canvas')).toHaveAttribute('data-ready', 'true');
     await expect(page.locator('.library-book-details')).toHaveAttribute(
       'data-artwork-ready',
@@ -130,7 +135,10 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page.mouse.up();
     await page.getByRole('button', { name: 'Zoom in on library' }).click();
     await page.getByRole('button', { name: 'Read PDF edition →' }).click();
-    await expect(page.locator('.library-reader object')).toHaveAttribute('data', /^blob:/);
+    await expect(page.locator('.pdf-reader')).toBeVisible();
+    const openCover = page.getByRole('button', { name: 'Open document cover' });
+    if (await openCover.count()) await openCover.click();
+    await expect(page.getByRole('img', { name: 'Document page 1', exact: true })).toBeVisible();
     const download = page.waitForEvent('download');
     await page.getByRole('link', { name: 'Download edition' }).click();
     expect((await download).suggestedFilename()).toBe('edition.pdf');
@@ -145,6 +153,7 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
     await page.locator('.run-app input').press('Enter');
+    await page.getByRole('button', { name: 'All Collections', exact: true }).click();
     await expect(page.locator('.library-index')).toContainText(title);
     await expect(page.locator('.library-app input[type=file]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Owner access', exact: true }).click();

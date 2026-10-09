@@ -53,7 +53,7 @@ const meta: Record<AppId, { title: string; icon: IconName; width: number; height
   run: { title: 'Run', icon: 'computer', width: 420, height: 225 },
   game: { title: 'Memory Lane', icon: 'game', width: 430, height: 585 },
   dialog: { title: 'Personal Computer', icon: 'computer', width: 440, height: 255 },
-  shelf: { title: 'My Shelf · The reading room', icon: 'certificate', width: 980, height: 740 },
+  shelf: { title: 'My Shelf · The collection room', icon: 'certificate', width: 980, height: 740 },
   games: { title: 'Games', icon: 'game', width: 650, height: 565 },
   snake: { title: 'Snake', icon: 'game', width: 520, height: 570 },
   pong: { title: 'Pong', icon: 'game', width: 690, height: 535 },

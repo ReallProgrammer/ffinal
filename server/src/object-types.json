@@ -1,0 +1,285 @@
+[
+  {
+    "id": "certificate",
+    "label": "Certificate or award",
+    "category": "certificates",
+    "geometry": "certificate",
+    "dimensions": [3.5, 2.5, 0.12],
+    "surfaces": ["front", "back"],
+    "document": true,
+    "fields": [
+      {
+        "key": "issuer",
+        "label": "Issuing organization",
+        "input": "text"
+      },
+      {
+        "key": "recipient",
+        "label": "Recipient",
+        "input": "text"
+      },
+      {
+        "key": "issued",
+        "label": "Date issued",
+        "input": "date"
+      },
+      {
+        "key": "expires",
+        "label": "Expiration date",
+        "input": "date"
+      },
+      {
+        "key": "skills",
+        "label": "Skills / competencies",
+        "input": "text"
+      },
+      {
+        "key": "credentialId",
+        "label": "Credential ID",
+        "input": "text"
+      },
+      {
+        "key": "verificationUrl",
+        "label": "Verification URL",
+        "input": "url"
+      },
+      {
+        "key": "notes",
+        "label": "Supporting notes",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "book",
+    "label": "Book",
+    "category": "books",
+    "geometry": "book",
+    "dimensions": [1.85, 2.85, 0.32],
+    "surfaces": ["front", "spine", "back"],
+    "document": true,
+    "fields": [
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      },
+      {
+        "key": "publicationDate",
+        "label": "Publication date",
+        "input": "date"
+      }
+    ]
+  },
+  {
+    "id": "vhs",
+    "label": "VHS case",
+    "category": "media",
+    "geometry": "vhs",
+    "dimensions": [1.9, 3.1, 0.55],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "vhs-tape",
+    "label": "VHS tape",
+    "category": "media",
+    "geometry": "tape",
+    "dimensions": [3.2, 1.8, 0.45],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "cassette",
+    "label": "Audio cassette",
+    "category": "media",
+    "geometry": "cassette",
+    "dimensions": [2.5, 1.6, 0.3],
+    "surfaces": ["front", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "artist",
+        "label": "Artist",
+        "input": "text"
+      },
+      {
+        "key": "label",
+        "label": "Record label",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "minidisc",
+    "label": "MiniDisc",
+    "category": "media",
+    "geometry": "minidisc",
+    "dimensions": [1.8, 1.8, 0.15],
+    "surfaces": ["front", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "artist",
+        "label": "Artist",
+        "input": "text"
+      },
+      {
+        "key": "label",
+        "label": "Record label",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "bluray",
+    "label": "Blu-ray movie",
+    "category": "media",
+    "geometry": "case",
+    "dimensions": [1.8, 2.3, 0.22],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "dvd",
+    "label": "DVD",
+    "category": "media",
+    "geometry": "case",
+    "dimensions": [1.9, 2.7, 0.23],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "ps5",
+    "label": "PlayStation 5 game",
+    "category": "games",
+    "geometry": "case",
+    "dimensions": [1.8, 2.3, 0.22],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "developer",
+        "label": "Developer",
+        "input": "text"
+      },
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "xbox",
+    "label": "Xbox game",
+    "category": "games",
+    "geometry": "case",
+    "dimensions": [1.8, 2.3, 0.24],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "developer",
+        "label": "Developer",
+        "input": "text"
+      },
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "pc",
+    "label": "PC game",
+    "category": "games",
+    "geometry": "case",
+    "dimensions": [2, 2.8, 0.4],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "developer",
+        "label": "Developer",
+        "input": "text"
+      },
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "model",
+    "label": "Generic 3D object",
+    "category": "objects",
+    "geometry": "model",
+    "dimensions": [2.5, 2.5, 1.8],
+    "surfaces": ["front"],
+    "document": false,
+    "fields": [
+      {
+        "key": "creator",
+        "label": "Creator",
+        "input": "text"
+      },
+      {
+        "key": "medium",
+        "label": "Medium",
+        "input": "text"
+      }
+    ]
+  },
+  {
+    "id": "vinyl",
+    "label": "Vinyl record sleeve",
+    "category": "media",
+    "geometry": "vinyl",
+    "dimensions": [2.8, 2.8, 0.15],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "artist",
+        "label": "Artist",
+        "input": "text"
+      },
+      {
+        "key": "label",
+        "label": "Record label",
+        "input": "text"
+      }
+    ]
+  }
+]

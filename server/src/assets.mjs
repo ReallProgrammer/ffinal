@@ -1,8 +1,10 @@
+import { validateModel } from './models.mjs';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { fileTypeFromBuffer } from 'file-type';
 import yauzl from 'yauzl';
 export async function validateAsset(buffer, kind) {
+  if (kind === 'model') return validateModel(buffer);
   const detected = await fileTypeFromBuffer(buffer);
   if (kind !== 'digital') {
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(detected?.mime))
@@ -14,10 +16,17 @@ export async function validateAsset(buffer, kind) {
       throw new Error('Use a single, non-animated cover image.');
     const texture = await image
       .rotate()
-      .resize({ width: 1024, height: 1536, fit: 'inside', withoutEnlargement: true })
+      .resize({ width: 1536, height: 1536, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 85 })
       .toBuffer();
-    return { mime: detected.mime, texture };
+    return {
+      mime: detected.mime,
+      texture,
+      details: {
+        width: meta.autoOrient?.width || meta.width,
+        height: meta.autoOrient?.height || meta.height,
+      },
+    };
   }
   if (buffer.length > 50 * 1024 * 1024) throw new Error('Digital books must be 50 MB or smaller.');
   if (detected?.mime === 'application/pdf') {
@@ -95,4 +104,35 @@ export async function validateAsset(buffer, kind) {
     return { mime: 'application/epub+zip' };
   }
   throw new Error('Digital books must be genuine PDF or EPUB files.');
+}
+
+export async function cropImage(buffer, crop) {
+  const oriented = await sharp(buffer, { limitInputPixels: 40_000_000 }).rotate().toBuffer();
+  const meta = await sharp(oriented).metadata();
+  const w = meta.width,
+    h = meta.height;
+  let cw = Math.min(w, h * crop.ratio) / crop.zoom,
+    ch = cw / crop.ratio;
+  cw = Math.max(1, Math.floor(cw));
+  ch = Math.max(1, Math.floor(ch));
+  const left = Math.round((w - cw) * crop.x),
+    top = Math.round((h - ch) * crop.y);
+  const width = Math.max(16, Math.round(Math.min(1536, 1536 * crop.ratio))),
+    height = Math.max(16, Math.round(width / crop.ratio));
+  const texture = await sharp(oriented)
+    .extract({ left, top, width: cw, height: ch })
+    .resize(width, height, { fit: 'fill' })
+    .webp({ quality: 88 })
+    .toBuffer();
+  return {
+    texture,
+    details: {
+      width: w,
+      height: h,
+      crop,
+      textureWidth: width,
+      textureHeight: height,
+      lowResolution: cw < width || ch < height,
+    },
+  };
 }

@@ -7,29 +7,10 @@ import { z } from 'zod';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { verifyPassword } from './password.mjs';
-import { validateAsset } from './assets.mjs';
+import { validateAsset, cropImage } from './assets.mjs';
+import { itemSchema, cropSchema, types } from './collection-schema.mjs';
 const uuid = z.string().uuid();
-const bookSchema = z
-  .object({
-    title: z.string().trim().min(1).max(180),
-    author: z.string().trim().min(1).max(120),
-    description: z.string().max(6000).default(''),
-    genre: z.string().trim().max(80).default(''),
-    year: z.number().int().min(1).max(2200).nullable().default(null),
-    isbn: z.string().max(32).default(''),
-    color: z.string().regex(/^#[a-fA-F0-9]{6}$/),
-    height: z.number().min(1.6).max(3.6),
-    width: z.number().min(1).max(2.6),
-    thickness: z.number().min(0.12).max(0.8),
-    shelfId: uuid,
-    published: z.boolean().default(false),
-    digitalAccess: z.enum(['private', 'public']).default('private'),
-    front: uuid.nullable().default(null),
-    spine: uuid.nullable().default(null),
-    back: uuid.nullable().default(null),
-    digital: uuid.nullable().default(null),
-  })
-  .strict();
+const bookSchema = itemSchema;
 const shelfSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const problem = (status, message) => Object.assign(new Error(message), { status });
@@ -50,6 +31,15 @@ export function createApp({ db, s3, config }) {
   app.use(express.json({ limit: '64kb' }));
   app.use('/api/v1', (_req, res, next) => {
     res.set('Cache-Control', 'no-store');
+    next();
+  });
+  // Compatibility aliases keep existing book clients working during independent deployments.
+  app.use('/api/v1', (req, _res, next) => {
+    req.url = req.url
+      .replace(/^\/collection(?=\?|$)/, '/library')
+      .replace(/^\/admin\/collection(?=\?|$)/, '/admin/library')
+      .replace(/^\/admin\/items(?=\/|\?|$)/, '/admin/books')
+      .replace(/^\/items(?=\/)/, '/books');
     next();
   });
   const api = express.Router();
@@ -115,14 +105,14 @@ export function createApp({ db, s3, config }) {
       )
     ).rows;
     const assets = (
-      await db.query('SELECT id,kind,mime,filename FROM assets WHERE id=ANY($1::uuid[])', [
-        records.flatMap((r) => [r.front, r.spine, r.back, r.digital]).filter(Boolean),
+      await db.query('SELECT id,kind,mime,filename,details FROM assets WHERE id=ANY($1::uuid[])', [
+        records.flatMap((r) => [r.front, r.spine, r.back, r.digital, r.model]).filter(Boolean),
       ])
     ).rows;
     const books = records.map((row) => {
       const asset = (kind) => {
         const a = assets.find((a) => a.id === row[kind]);
-        return a ? { id: a.id, mime: a.mime, filename: a.filename } : null;
+        return a ? { id: a.id, mime: a.mime, filename: a.filename, ...a.details } : null;
       };
       const canRead = Boolean(row.digital && (admin || row.metadata.digitalAccess === 'public'));
       return {
@@ -132,6 +122,9 @@ export function createApp({ db, s3, config }) {
         position: row.position,
         published: row.published,
         updatedAt: row.updated_at,
+        createdAt: row.created_at,
+        category: types.find((t) => t.id === (row.metadata.objectType || 'book'))?.category,
+        model: asset('model'),
         front: asset('front'),
         spine: asset('spine'),
         back: asset('back'),
@@ -141,6 +134,7 @@ export function createApp({ db, s3, config }) {
     });
     return { shelves, books };
   }
+  api.get('/types', (_req, res) => res.json(types));
   api.get('/library', async (_req, res) => res.json(await library()));
   api.get('/admin/library', owner, async (_req, res) => res.json(await library(true)));
   api.post(
@@ -149,7 +143,7 @@ export function createApp({ db, s3, config }) {
     rateLimit({ windowMs: 60 * 1000, limit: 30, legacyHeaders: false }),
     upload,
     async (req, res) => {
-      const kind = z.enum(['front', 'spine', 'back', 'digital']).parse(req.body.kind);
+      const kind = z.enum(['front', 'spine', 'back', 'digital', 'model']).parse(req.body.kind);
       if (!req.file) throw problem(400, 'Choose a file to upload.');
       let validated;
       try {
@@ -180,8 +174,17 @@ export function createApp({ db, s3, config }) {
             }),
           );
         await db.query(
-          'INSERT INTO assets(id,kind,original_key,texture_key,mime,filename,bytes) VALUES($1,$2,$3,$4,$5,$6,$7)',
-          [id, kind, originalKey, textureKey, validated.mime, filename, req.file.size],
+          'INSERT INTO assets(id,kind,original_key,texture_key,mime,filename,bytes,details) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+          [
+            id,
+            kind,
+            originalKey,
+            textureKey,
+            validated.mime,
+            filename,
+            req.file.size,
+            validated.details || {},
+          ],
         );
       } catch (error) {
         await Promise.allSettled(
@@ -191,9 +194,77 @@ export function createApp({ db, s3, config }) {
         );
         throw error;
       }
-      res.status(201).json({ id, mime: validated.mime, filename });
+      res.status(201).json({ id, mime: validated.mime, filename, ...validated.details });
     },
   );
+  api.post(
+    '/admin/assets/:id/crop',
+    owner,
+    rateLimit({ windowMs: 60000, limit: 30, legacyHeaders: false }),
+    async (req, res) => {
+      const crop = cropSchema.parse(req.body);
+      const source = (
+        await db.query('SELECT * FROM assets WHERE id=$1', [uuid.parse(req.params.id)])
+      ).rows[0];
+      if (!source || !['front', 'spine', 'back'].includes(source.kind))
+        throw problem(404, 'Artwork not found.');
+      const original = await s3.send(
+        new GetObjectCommand({ Bucket: config.bucket, Key: source.original_key }),
+      );
+      const buffer = Buffer.from(await original.Body.transformToByteArray());
+      const processed = await cropImage(buffer, crop);
+      const id = randomUUID(),
+        originalKey = `originals/${id}`,
+        textureKey = `textures/${id}.webp`;
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: originalKey,
+            Body: buffer,
+            ContentType: source.mime,
+          }),
+        );
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: config.bucket,
+            Key: textureKey,
+            Body: processed.texture,
+            ContentType: 'image/webp',
+          }),
+        );
+        await db.query(
+          'INSERT INTO assets(id,kind,original_key,texture_key,mime,filename,bytes,details) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+          [
+            id,
+            source.kind,
+            originalKey,
+            textureKey,
+            source.mime,
+            source.filename,
+            buffer.length,
+            processed.details,
+          ],
+        );
+      } catch (e) {
+        await Promise.allSettled(
+          [originalKey, textureKey].map((Key) =>
+            s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key })),
+          ),
+        );
+        throw e;
+      }
+      res
+        .status(201)
+        .json({ id, mime: source.mime, filename: source.filename, ...processed.details });
+    },
+  );
+  api.get('/books/:id', async (req, res) => {
+    const data = await library(await session(req));
+    const item = data.books.find((b) => b.id === uuid.parse(req.params.id));
+    if (!item) throw problem(404, 'Item not found.');
+    res.json(item);
+  });
   api.get('/assets/:id', async (req, res) => {
     const id = uuid.parse(req.params.id);
     const admin = await session(req);
@@ -203,7 +274,7 @@ export function createApp({ db, s3, config }) {
       !admin &&
       !(
         await db.query(
-          'SELECT 1 FROM books WHERE published=true AND ($1=front OR $1=spine OR $1=back)',
+          'SELECT 1 FROM books WHERE published=true AND ($1=front OR $1=spine OR $1=back OR $1=model)',
           [id],
         )
       ).rowCount
@@ -214,10 +285,10 @@ export function createApp({ db, s3, config }) {
     const data = await s3.send(
       new GetObjectCommand({
         Bucket: config.bucket,
-        Key: original ? asset.original_key : asset.texture_key,
+        Key: original || asset.kind === 'model' ? asset.original_key : asset.texture_key,
       }),
     );
-    res.type(original ? asset.mime : 'image/webp');
+    res.type(original || asset.kind === 'model' ? asset.mime : 'image/webp');
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     res.set('Content-Length', String(data.ContentLength));
     data.Body.on('error', () => res.destroy());
@@ -305,14 +376,13 @@ export function createApp({ db, s3, config }) {
   }
   async function saveBook(req, res, create) {
     const input = bookSchema.parse(req.body);
-    if (input.published && !input.front)
-      throw problem(400, 'Upload a front cover before publishing.');
-    const { shelfId, published, front, spine, back, digital, ...metadata } = input;
+
+    const { shelfId, published, front, spine, back, digital, model, ...metadata } = input;
     const client = await db.connect();
     let id = create ? randomUUID() : uuid.parse(req.params.id);
     try {
       await client.query('BEGIN');
-      for (const [kind, value] of Object.entries({ front, spine, back, digital }))
+      for (const [kind, value] of Object.entries({ front, spine, back, digital, model }))
         if (
           value &&
           !(
@@ -325,14 +395,14 @@ export function createApp({ db, s3, config }) {
           throw problem(400, `Invalid ${kind} asset.`);
       if (create)
         await client.query(
-          'INSERT INTO books(id,shelf_id,published,metadata,front,spine,back,digital,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,(SELECT count(*) FROM books))',
-          [id, shelfId, published, metadata, front, spine, back, digital],
+          'INSERT INTO books(id,shelf_id,published,metadata,front,spine,back,digital,model,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,(SELECT count(*) FROM books))',
+          [id, shelfId, published, metadata, front, spine, back, digital, model],
         );
       else if (
         !(
           await client.query(
-            'UPDATE books SET shelf_id=$2,published=$3,metadata=$4,front=$5,spine=$6,back=$7,digital=$8,updated_at=now() WHERE id=$1',
-            [id, shelfId, published, metadata, front, spine, back, digital],
+            'UPDATE books SET shelf_id=$2,published=$3,metadata=$4,front=$5,spine=$6,back=$7,digital=$8,model=$9,updated_at=now() WHERE id=$1',
+            [id, shelfId, published, metadata, front, spine, back, digital, model],
           )
         ).rowCount
       )
@@ -356,7 +426,7 @@ export function createApp({ db, s3, config }) {
     res.json(
       (
         await db.query(
-          'SELECT id,kind,filename,bytes,created_at FROM assets WHERE NOT EXISTS (SELECT 1 FROM books WHERE assets.id IN (front,spine,back,digital)) ORDER BY created_at DESC',
+          'SELECT id,kind,filename,bytes,created_at FROM assets WHERE NOT EXISTS (SELECT 1 FROM books WHERE assets.id IN (front,spine,back,digital,model)) ORDER BY created_at DESC',
         )
       ).rows,
     ),
@@ -370,8 +440,11 @@ export function createApp({ db, s3, config }) {
         .rows[0];
       if (asset) {
         if (
-          (await client.query('SELECT 1 FROM books WHERE $1 IN (front,spine,back,digital)', [id]))
-            .rowCount
+          (
+            await client.query('SELECT 1 FROM books WHERE $1 IN (front,spine,back,digital,model)', [
+              id,
+            ])
+          ).rowCount
         )
           throw problem(409, 'This asset is still used by a book.');
         await Promise.all(

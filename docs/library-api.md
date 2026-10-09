@@ -10,6 +10,8 @@ There is exactly one configured owner. There is no registration endpoint, client
 
 Requests use `Authorization: Bearer <session>`. No authentication cookies are used, avoiding third-party cookie and cookie-based CSRF problems for GitHub Pages. CORS allows only configured frontend origins; CORS is not used as authentication. Sign-in is rate limited to 10 attempts per IP per 15 minutes; upload is limited to 30 per minute. Limits are process-local: use one API instance, or add shared rate-limit storage before horizontal scaling. Configure the exact trusted proxy hop count for your hosting provider so rate limiting uses the correct client address.
 
+The extended collection routes and object/model/crop contracts are documented in [Collection Room deployment](collection-deployment.md). These original routes remain compatible.
+
 ## Routes
 
 | Method       | Route                    | Access and result                                                              |
@@ -42,7 +44,7 @@ Library reads return book metadata plus `id`, `position`, `updatedAt`, `canRead`
 
 PNG/JPEG/WebP cover originals are limited to 10 MB and 40 million decoded pixels. Magic bytes and the image decoder validate the file; animation and SVG are rejected. Originals are stored privately. Sharp applies orientation and produces a WebP texture bounded by 1024 × 1536 while preserving aspect ratio. The renderer places artwork proportionally on each face without cropping or mirroring. Generated cloth/spine/back designs are identified in the editor and book details.
 
-PDF/EPUB files are limited to 50 MB. PDFs must parse, have at least one page, and not require a password. EPUB archives must contain the expected mimetype/container, have safe paths, no encryption, at most 5,000 entries and 150 MB expanded size. Original PDFs are served for the browser's native viewer; EPUB chapters are extracted as escaped text, with scripts, embedded frames and styles removed. No EPUB HTML or external asset is executed in the app. Images/layout-heavy EPUBs can be downloaded for a full reader.
+PDF/EPUB files are limited to 50 MB. PDFs must parse, have at least one page, and not require a password. EPUB archives must contain the expected mimetype/container, have safe paths, no encryption, at most 5,000 entries and 150 MB expanded size. Original PDFs remain the source document; PDF.js renders actual pages in the collection's perspective page-turn reader; EPUB chapters are extracted as escaped text, with scripts, embedded frames and styles removed. No EPUB HTML or external asset is executed in the app. Images/layout-heavy EPUBs can be downloaded for a full reader.
 
 All S3 objects are private. The API streams authorized files through itself, so the browser needs no S3 credentials or bucket CORS policy. There are no permanent public object URLs or signed links surviving unpublish. Responses use `Cache-Control: no-store`. Unpublishing revokes subsequent requests immediately; files already downloaded cannot be recalled. Back up both PostgreSQL and object storage.
 

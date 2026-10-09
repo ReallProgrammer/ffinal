@@ -8,7 +8,10 @@ import type { ShelfItem } from '../../lib/shelf/repository';
 import MenuBar from '../MenuBar';
 import LibraryAdmin from '../library/LibraryAdmin';
 import Reader from '../library/Reader';
+import CollectionThumbnail from '../library/CollectionThumbnail';
 import '../../library.css';
+import { categories, objectType } from '../../lib/library/registry';
+import { playSound } from '../../lib/sound';
 const LibraryScene = lazy(() => import('../library/LibraryScene'));
 const empty: LibraryData = { books: [], shelves: [] };
 export default function Shelf({
@@ -45,15 +48,29 @@ export default function Shelf({
     [archive, setArchive] = useState<ShelfItem[]>([]),
     [artworkReady, setArtworkReady] = useState(false);
   const [artworkError, setArtworkError] = useState('');
+  const [sceneVersion, setSceneVersion] = useState(0);
+  const [category, setCategory] = useState('certificates'),
+    [autoRotate, setAutoRotate] = useState(false),
+    [resetKey, setResetKey] = useState(0);
+  const cue = (kind: 'open' | 'close') => {
+    if (settings.sound) playSound(kind, settings.volume * 0.35);
+  };
+  const returnToShelf = () => {
+    setSelected('');
+    setZoom(1);
+    cue('close');
+  };
   const load = useCallback(async () => {
     if (!repository.configured) {
       setLoading(false);
       return;
     }
     setError('');
+    (await import('../library/resources')).clearCollectionCache(repository);
     try {
       const next = await repository.list(repository.isOwner());
       setData(next);
+      setSceneVersion((v) => v + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -65,6 +82,7 @@ export default function Shelf({
     const changed = () => {
       setOwner(repository.isOwner());
       if (!repository.isOwner()) {
+        void import('../library/resources').then((m) => m.clearCollectionCache(repository));
         setData(empty);
         setReading(null);
         setMode((m) => (m === 'manage' ? 'login' : m));
@@ -84,8 +102,7 @@ export default function Shelf({
       if (e.key === 'Escape' && !e.defaultPrevented) {
         if (reading) setReading(null);
         else if (selected) {
-          setSelected('');
-          setZoom(1);
+          returnToShelf();
         } else if (mode !== 'library') setMode('library');
       }
     };
@@ -96,9 +113,12 @@ export default function Shelf({
     .filter(
       (b) =>
         b.published &&
+        (category === 'all' || objectType(b).category === category) &&
         (!shelf || b.shelfId === shelf) &&
         (!genre || b.genre === genre) &&
-        `${b.title} ${b.author}`.toLowerCase().includes(search.toLowerCase()),
+        `${b.title} ${b.author} ${Object.values(b.details || {}).join(' ')}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
     )
     .sort((a, b) =>
       sort === 'title'
@@ -109,7 +129,7 @@ export default function Shelf({
             ? (b.year || 0) - (a.year || 0)
             : a.position - b.position,
     );
-  const pageSize = innerWidth < 700 ? 16 : 48;
+  const pageSize = innerWidth < 700 ? 8 : 16;
   const pageBooks = books.slice(page * pageSize, (page + 1) * pageSize);
   const current = data.books.find((b) => b.id === selected && b.published);
   const displayedShelves = data.shelves.filter((s) => !shelf || s.id === shelf);
@@ -117,7 +137,7 @@ export default function Shelf({
     setPage(0);
     setSelected('');
     setZoom(1);
-  }, [search, genre, sort, shelf, pageSize]);
+  }, [search, genre, sort, shelf, pageSize, category]);
   useEffect(() => {
     if (initialView === 'archive')
       void shelfRepository
@@ -126,6 +146,7 @@ export default function Shelf({
         .catch((e) => setError(e.message));
   }, [initialView]);
   const inspect = (id: string) => {
+    cue('open');
     setSelected(id);
     setZoom(1);
     setArtworkReady(false);
@@ -294,18 +315,25 @@ export default function Shelf({
             <div>
               <span className="library-kicker">A PERSONAL COLLECTION · EST. 2004</span>
               <h1>
-                The reading room<span>.</span>
+                The collection room<span>.</span>
               </h1>
-              <p>Good books. Quiet discoveries. A little time of your own.</p>
+              <p>Achievements, discoveries, and objects worth keeping.</p>
             </div>
             <BookOpen size={37} />
           </header>
+          <nav className="collection-categories" aria-label="Collection categories">
+            {categories.map((c) => (
+              <button key={c.id} aria-pressed={category === c.id} onClick={() => setCategory(c.id)}>
+                {c.label}
+              </button>
+            ))}
+          </nav>
           <div className="library-toolbar">
             <label className="library-search">
               <Search size={14} />
               <input
-                aria-label="Search books"
-                placeholder="Find a title or an author…"
+                aria-label="Search collection"
+                placeholder="Search titles, issuers, skills, creators…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -354,6 +382,7 @@ export default function Shelf({
                   fallback={<div className="library-loading">Preparing the reading room…</div>}
                 >
                   <LibraryScene
+                    key={sceneVersion}
                     books={pageBooks}
                     shelves={displayedShelves}
                     selected={current?.id || ''}
@@ -361,6 +390,8 @@ export default function Shelf({
                     repository={repository}
                     reduced={reduced}
                     zoom={zoom}
+                    autoRotate={autoRotate}
+                    resetKey={resetKey}
                     onHover={setHover}
                     onArtworkReady={setArtworkReady}
                     onArtworkError={setArtworkError}
@@ -373,13 +404,15 @@ export default function Shelf({
                   <h2>
                     {search || genre
                       ? 'Nothing on this shelf.'
-                      : 'Every library begins\nwith one good book.'}
+                      : category === 'certificates'
+                        ? 'A place for your achievements.'
+                        : 'Every collection starts with a story.'}
                   </h2>
                   <p>
                     {search || genre
                       ? 'Try another title, author, or genre.'
                       : repository.configured
-                        ? 'The first editions are still being gathered. Come back soon.'
+                        ? 'No published objects in this category yet. Explore All Collections or sign in to add one.'
                         : 'The collection is being prepared. The shelves will open soon.'}
                   </p>
                 </div>
@@ -419,42 +452,65 @@ export default function Shelf({
                 <button
                   aria-label="Reset library view"
                   onClick={() => {
-                    setSelected('');
                     setZoom(1);
+                    setResetKey((k) => k + 1);
                   }}
                 >
                   <RotateCcw size={16} />
                 </button>
               </div>
+              {current && (
+                <label className="collection-autorotate">
+                  <input
+                    type="checkbox"
+                    checked={autoRotate}
+                    onChange={(e) => setAutoRotate(e.target.checked)}
+                  />
+                  Auto rotate
+                </label>
+              )}
               <div className="library-scene-hint">
                 {current
                   ? 'Drag to turn · pinch or scroll to zoom'
-                  : 'Choose a spine. See where it takes you.'}
+                  : 'Choose an object to explore its story.'}
               </div>
             </div>
             {current && (
               <aside
                 className="library-book-details"
-                aria-label="Book details"
+                aria-label="Object details"
                 data-artwork-ready={artworkReady}
               >
-                <button
-                  className="library-return"
-                  onClick={() => {
-                    setSelected('');
-                    setZoom(1);
-                  }}
-                >
+                <button className="library-return" onClick={returnToShelf}>
                   <X size={14} />
                   Return to shelf
                 </button>
                 <span className="library-kicker">{current.genre || 'FROM THE COLLECTION'}</span>
                 <h2>{current.title}</h2>
-                <p className="library-author">by {current.author}</p>
+                <p className="library-author">
+                  {objectType(current).label}
+                  {current.author ? ` · ${current.author}` : ''}
+                </p>
                 <p className="library-description">
                   {current.description || 'An edition from the personal collection.'}
                 </p>
                 <dl>
+                  {objectType(current).fields.map((field) =>
+                    current.details?.[field.key] ? (
+                      <div className="collection-detail-field" key={field.key}>
+                        <dt>{field.label}</dt>
+                        <dd>
+                          {field.input === 'url' ? (
+                            <a href={current.details[field.key]} target="_blank" rel="noreferrer">
+                              Verify credential ↗
+                            </a>
+                          ) : (
+                            current.details[field.key]
+                          )}
+                        </dd>
+                      </div>
+                    ) : null,
+                  )}
                   {current.year && (
                     <>
                       <dt>Published</dt>
@@ -470,23 +526,22 @@ export default function Shelf({
                   <dt>Shelf</dt>
                   <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name}</dd>
                 </dl>
+                {!artworkReady && !artworkError && (
+                  <p role="status">Preparing object and artwork…</p>
+                )}
                 {artworkError && (
                   <p role="alert" className="library-binding-note">
                     {artworkError}
                   </p>
                 )}
-                <p className="library-binding-note">
-                  {!current.spine ? 'Generated spine design. ' : ''}
-                  {!current.back ? 'Generated back design.' : ''}
-                </p>
                 {current.canRead ? (
                   <button className="library-read-button" onClick={() => setReading(current)}>
                     <BookOpen size={16} />
                     Read {current.digital?.mime === 'application/pdf' ? 'PDF' : 'EPUB'} edition →
                   </button>
-                ) : (
+                ) : objectType(current).document ? (
                   <p className="library-unavailable">No public reading edition is available.</p>
-                )}
+                ) : null}
               </aside>
             )}
           </div>
@@ -498,7 +553,15 @@ export default function Shelf({
                   aria-pressed={selected === book.id}
                   onClick={() => inspect(book.id)}
                 >
-                  <i style={{ background: book.color }} />
+                  {book.objectType === 'model' && book.front ? (
+                    <CollectionThumbnail
+                      id={book.front.id}
+                      repository={repository}
+                      color={book.color}
+                    />
+                  ) : (
+                    <i style={{ background: book.color }} />
+                  )}
                   <span>
                     {book.title}
                     <small>{book.author}</small>
@@ -533,7 +596,26 @@ export default function Shelf({
             </div>
           )}
           <footer className="library-footer">
-            <span>Collected with care. Read at your own pace.</span>
+            <span>Collected with care. Every object has a story.</span>
+            <div className="collection-audio">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={settings.sound}
+                  onChange={(e) => setSettings({ sound: e.target.checked })}
+                />
+                Sound
+              </label>
+              <input
+                aria-label="Collection sound volume"
+                type="range"
+                min="0"
+                max="1"
+                step=".05"
+                value={settings.volume}
+                onChange={(e) => setSettings({ volume: Number(e.target.value) })}
+              />
+            </div>
             <button onClick={ownerAccess}>
               <LockKeyhole size={11} />
               {owner ? 'Librarian’s desk' : 'Owner access'}
@@ -542,7 +624,12 @@ export default function Shelf({
         </>
       )}
       {reading && (
-        <Reader book={reading} repository={repository} onClose={() => setReading(null)} />
+        <Reader
+          book={reading}
+          repository={repository}
+          active={active}
+          onClose={() => setReading(null)}
+        />
       )}
     </div>
   );
