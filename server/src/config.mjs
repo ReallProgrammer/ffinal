@@ -17,10 +17,15 @@ export function configuration(env = process.env) {
     throw new Error('FRONTEND_ORIGINS must list exact origins without paths.');
   if (env.NODE_ENV === 'production' && origins.some((s) => !s.startsWith('https://')))
     throw new Error('Production frontend origins require HTTPS.');
+  if (env.S3_FORCE_PATH_STYLE && !['true', 'false'].includes(env.S3_FORCE_PATH_STYLE))
+    throw new Error('S3_FORCE_PATH_STYLE must be true or false.');
   return {
     databaseUrl: env.DATABASE_URL,
     bucket: env.S3_BUCKET,
     endpoint: env.S3_ENDPOINT || undefined,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE
+      ? env.S3_FORCE_PATH_STYLE === 'true'
+      : Boolean(env.S3_ENDPOINT),
     region: env.S3_REGION || 'us-east-1',
     accessKeyId: env.S3_ACCESS_KEY_ID,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY,

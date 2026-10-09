@@ -9,7 +9,7 @@ await db.query(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'))
 const s3 = new S3Client({
   region: config.region,
   endpoint: config.endpoint,
-  forcePathStyle: Boolean(config.endpoint),
+  forcePathStyle: config.forcePathStyle,
   credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
 });
 try {

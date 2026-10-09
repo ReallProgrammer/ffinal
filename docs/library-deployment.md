@@ -2,10 +2,15 @@
 
 The frontend and backend deploy independently. GitHub Pages hosts the existing OS and the 3D client. A Node.js service hosts the API; PostgreSQL stores metadata and hashed owner sessions; a private S3-compatible bucket stores originals and textures. **No production backend is connected yet.** Until configured, the public app displays an empty reading room, and its owner panel explains setup without offering a bypass login or local publishing.
 
+For a fresh setup with one provider, follow the [Railway walkthrough](library-railway.md).
+
 ## Production backend
 
 1. Provision PostgreSQL and a private S3-compatible bucket. Enable the provider's public-access block. Grant the API identity only bucket inspection plus get/put/delete objects in this bucket. Keep its credentials in your backend host's secret settings.
 2. Copy the configuration names from `server/.env.example` into the host. `DATABASE_URL` uses your provider's verified TLS configuration. Do not disable certificate verification. Leave `S3_ENDPOINT` unset for AWS, or set the provider's HTTPS endpoint. Set `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`.
+
+   Set `S3_FORCE_PATH_STYLE=false` for virtual-hosted storage such as new Railway buckets. Set it to `true` only if your provider requires path-style URLs. When omitted, a custom endpoint defaults to path style for compatibility with the local emulator; AWS defaults to virtual-hosted style.
+
 3. Set your `OWNER_EMAIL`. Generate `OWNER_PASSWORD_HASH` locally using the supplied scrypt helper. In Bash, this reads a password without echoing it or putting it into shell history:
 
    ```sh
