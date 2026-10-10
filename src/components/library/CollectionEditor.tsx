@@ -6,8 +6,15 @@ import type {
   LibraryRepository,
   Presentation,
 } from '../../lib/library/types';
-import { objectType, surfaceRatio, surfaceSize } from '../../lib/library/registry';
+import { objectType } from '../../lib/library/registry';
 import CropEditor from './CropEditor';
+import { withArtwork } from '../../lib/library/types';
+import UploadField from './UploadField';
+import SurfaceStudio from './SurfaceStudio';
+import WrapEditor from './WrapEditor';
+import GenreEditor from './GenreEditor';
+import AppearanceControls from './AppearanceControls';
+import PlacementEditor from './PlacementEditor';
 const BookPreview = lazy(() => import('./LibraryScene').then((m) => ({ default: m.BookPreview })));
 export const defaultPresentation: Presentation = {
   frame: true,
@@ -34,37 +41,18 @@ export default function CollectionEditor({
   const [draft, setDraft] = useState(initial),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
-    [progress, setProgress] = useState<number | null>(null),
+    [uploading, setUploading] = useState(false),
     [crop, setCrop] = useState<AssetKind | null>(null),
     [background, setBackground] = useState('#e2dfd4'),
-    [light, setLight] = useState(3);
+    [light, setLight] = useState(3),
+    [tagsText, setTagsText] = useState((initial.tags || []).join(', '));
   const type = objectType(draft);
   const presentation = { ...defaultPresentation, ...draft.presentation };
   const appearance = (value: Partial<Presentation>) =>
     setDraft((d) => ({ ...d, presentation: { ...presentation, ...value } }));
-  async function upload(file: File, kind: AssetKind) {
-    setBusy(true);
-    setError('');
-    setProgress(0);
-    try {
-      let asset = await repository.upload(file, kind, setProgress);
-      if (['front', 'spine', 'back'].includes(kind))
-        asset = await repository.crop(asset.id, {
-          x: 0.5,
-          y: 0.5,
-          zoom: 1,
-          ratio: surfaceRatio(draft, kind),
-        });
-      setDraft((d) => ({ ...d, [kind]: asset }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setProgress(null);
-      setBusy(false);
-    }
-  }
   const surfaces = [
     ...type.surfaces,
+    ...type.contents,
     ...(type.document ? ['digital'] : []),
     ...(type.id === 'model' ? ['model'] : []),
   ] as AssetKind[];
@@ -75,7 +63,7 @@ export default function CollectionEditor({
           <small>{type.label.toUpperCase()} / PRIVATE EDITOR</small>
           <h2>{draft.id ? 'Refine your collection.' : 'A new addition.'}</h2>
         </div>
-        <button onClick={onCancel} disabled={busy}>
+        <button onClick={onCancel} disabled={busy || uploading}>
           Cancel
         </button>
       </header>
@@ -91,7 +79,20 @@ export default function CollectionEditor({
             setBusy(true);
             setError('');
             try {
-              await repository.save({ ...draft, presentation });
+              await repository.save({
+                ...draft,
+                presentation,
+                placement: draft.placement || {
+                  beforeId: draft.id
+                    ? data.books
+                        .filter((b) => b.shelfId === draft.shelfId && b.position > draft.position)
+                        .sort((a, b) => a.position - b.position)[0]?.id || null
+                    : null,
+                  expectedIds: data.books
+                    .filter((b) => b.shelfId === draft.shelfId && b.id !== draft.id)
+                    .map((b) => b.id),
+                },
+              });
               await onSaved();
             } catch (e) {
               setError((e as Error).message);
@@ -100,7 +101,7 @@ export default function CollectionEditor({
             }
           }}
         >
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy || uploading}>
             <legend>Details · separate from artwork</legend>
             <label>
               Title
@@ -145,14 +146,55 @@ export default function CollectionEditor({
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />
             </label>
+            <GenreEditor
+              item={draft}
+              initialGenres={data.genres || []}
+              repository={repository}
+              onChange={setDraft}
+            />
             <label>
-              {type.category === 'certificates' ? 'Subject' : 'Genre / subject'}
+              Tags (comma separated)
               <input
-                aria-label="Genre"
-                value={draft.genre}
-                onChange={(e) => setDraft({ ...draft, genre: e.target.value })}
+                value={tagsText}
+                onChange={(e) => {
+                  setTagsText(e.target.value);
+                  setDraft({
+                    ...draft,
+                    tags: e.target.value
+                      .split(',')
+                      .map((v) => v.trim())
+                      .filter(Boolean)
+                      .slice(0, 20),
+                  });
+                }}
               />
             </label>
+            {type.id === 'book' && (
+              <>
+                <label>
+                  Book number (optional)
+                  <input
+                    maxLength={40}
+                    value={draft.bookNumber || ''}
+                    onChange={(e) => setDraft({ ...draft, bookNumber: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Book order (optional)
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft.bookOrder ?? ''}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        bookOrder: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
             {type.category !== 'certificates' && (
               <label>
                 Release / publication year
@@ -176,21 +218,6 @@ export default function CollectionEditor({
                 />
               </label>
             )}
-            <label>
-              Shelf
-              <select
-                aria-label="Shelf"
-                required
-                value={draft.shelfId}
-                onChange={(e) => setDraft({ ...draft, shelfId: e.target.value })}
-              >
-                {data.shelves.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
           </fieldset>
           <fieldset disabled={busy}>
             <legend>Artwork & files</legend>
@@ -198,80 +225,28 @@ export default function CollectionEditor({
               Drop an image onto its surface. Originals stay private. Images fill the surface
               without stretching; adjust the crop to protect important content.
             </p>
-            {surfaces.map((kind) => {
-              const image = ['front', 'spine', 'back'].includes(kind),
-                size = surfaceSize(draft, kind);
-              return (
-                <div
-                  className="library-upload"
-                  key={kind}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!busy && e.dataTransfer.files[0])
-                      void upload(e.dataTransfer.files[0], kind);
-                  }}
-                >
-                  <strong>
-                    {kind === 'digital'
-                      ? 'Document'
-                      : kind === 'model'
-                        ? '3D model'
-                        : type.id === 'model' && kind === 'front'
-                          ? 'Collection thumbnail'
-                          : `${kind[0].toUpperCase() + kind.slice(1)} artwork`}
-                  </strong>
-                  {image ? (
-                    <small>
-                      {surfaceRatio(draft, kind).toFixed(3)}:1 ratio · {size[0]} × {size[1]} px
-                      recommended · PNG / JPEG / WebP · max 10 MB
-                    </small>
-                  ) : (
-                    <small>
-                      {kind === 'model'
-                        ? 'GLB or embedded GLTF · static · 25 MB · 250k vertices / triangles · 16 embedded textures'
-                        : 'PDF / EPUB · max 50 MB'}
-                    </small>
-                  )}
-                  <input
-                    type="file"
-                    aria-label={`Upload ${kind}`}
-                    accept={
-                      image
-                        ? 'image/png,image/jpeg,image/webp'
-                        : kind === 'model'
-                          ? '.glb,.gltf'
-                          : '.pdf,.epub'
-                    }
-                    onChange={(e) => {
-                      if (e.target.files?.[0]) void upload(e.target.files[0], kind);
-                      e.target.value = '';
-                    }}
-                  />
-                  <small>{draft[kind]?.filename || 'No file uploaded'}</small>
-                  {draft[kind]?.lowResolution && (
-                    <small className="crop-warning">
-                      Low resolution: consider a larger original.
-                    </small>
-                  )}
-                  {draft[kind] && (
-                    <div>
-                      {image && (
-                        <button type="button" onClick={() => setCrop(kind)}>
-                          Adjust {kind} crop
-                        </button>
-                      )}
-                      <button type="button" onClick={() => setDraft({ ...draft, [kind]: null })}>
-                        Remove {kind}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {type.document && (
+            {type.surfaces.includes('spine') && (
+              <WrapEditor
+                blocked={uploading}
+                item={draft}
+                repository={repository}
+                onChange={setDraft}
+                onBusy={setUploading}
+              />
+            )}
+            {surfaces.map((kind) => (
+              <UploadField
+                key={kind}
+                disabled={uploading}
+                item={draft}
+                kind={kind}
+                repository={repository}
+                onChange={(asset) => setDraft((d) => withArtwork(d, kind, asset))}
+                onCrop={() => setCrop(kind)}
+                onBusy={setUploading}
+              />
+            ))}
+            {(type.document || type.contents.includes('manual')) && (
               <label>
                 Document access
                 <select
@@ -287,8 +262,9 @@ export default function CollectionEditor({
               </label>
             )}
           </fieldset>
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy || uploading}>
             <legend>Physical appearance</legend>
+            <AppearanceControls item={{ ...draft, presentation }} onChange={setDraft} />
             <label>
               Material color
               <input
@@ -388,17 +364,21 @@ export default function CollectionEditor({
               Reset appearance
             </button>
           </fieldset>
-          {progress !== null && (
-            <div role="status">
-              <progress value={progress} max={100} />
-              {progress === 100 ? 'Validating and preparing surfaces…' : `Uploading · ${progress}%`}
-            </div>
+          {type.id !== 'model' && (
+            <SurfaceStudio
+              blocked={uploading}
+              item={draft}
+              repository={repository}
+              onChange={setDraft}
+              onBusy={setUploading}
+            />
           )}
+          <PlacementEditor item={draft} data={data} repository={repository} onChange={setDraft} />
           <label className="library-checkbox">
             <input
               type="checkbox"
               checked={draft.published}
-              disabled={busy}
+              disabled={busy || uploading}
               onChange={(e) => setDraft({ ...draft, published: e.target.checked })}
             />
             Published — visible to visitors
@@ -407,6 +387,7 @@ export default function CollectionEditor({
             className="library-read-button"
             disabled={
               busy ||
+              uploading ||
               !draft.title ||
               !draft.shelfId ||
               (draft.published && !(type.id === 'model' ? draft.model : draft.front))
@@ -458,7 +439,7 @@ export default function CollectionEditor({
           repository={repository}
           onClose={() => setCrop(null)}
           onSave={(asset) => {
-            setDraft({ ...draft, [crop]: asset });
+            setDraft(withArtwork(draft, crop, asset));
             setCrop(null);
           }}
         />

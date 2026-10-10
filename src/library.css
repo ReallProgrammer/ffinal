@@ -1511,3 +1511,352 @@
     transition: none;
   }
 }
+/* The collection studio keeps its tools beside the physical preview. */
+.surface-studio,
+.wrap-editor,
+.placement-editor,
+.genre-editor {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid #c3c4b2;
+  background: #f3f0e7;
+  border-radius: 6px;
+}
+.surface-studio h3,
+.wrap-editor h3,
+.placement-editor h3 {
+  margin: 0 0 10px;
+}
+.layer-toolbar,
+.layer-properties > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.layer-canvas {
+  position: relative;
+  width: 100%;
+  max-height: 600px;
+  overflow: hidden;
+  background-size: 100% 100%;
+  touch-action: none;
+  border: 1px solid #737d6e;
+  container-type: size;
+}
+.cover-layer {
+  position: absolute;
+  cursor: move;
+  touch-action: none;
+  outline: 1px dashed transparent;
+  user-select: none;
+}
+.cover-layer.selected {
+  outline-color: #91e0f4;
+}
+.cover-layer.locked {
+  cursor: default;
+}
+.cover-layer img,
+.cover-layer svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.layer-resize,
+.layer-rotate {
+  position: absolute;
+  width: 24px;
+  height: 24px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: #effcff !important;
+  color: #204859 !important;
+}
+.layer-resize {
+  right: -12px;
+  bottom: -12px;
+  cursor: nwse-resize;
+}
+.layer-rotate {
+  left: 50%;
+  top: -28px;
+  cursor: grab;
+}
+.layer-safe-area {
+  position: absolute;
+  inset: 5%;
+  border: 1px dashed #fff7;
+  pointer-events: none;
+}
+.layer-properties {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.layer-properties > div {
+  grid-column: 1/-1;
+}
+.layer-upload {
+  max-width: 190px;
+}
+.wrap-preview {
+  position: relative;
+  margin: 12px 0;
+  background: #dcded5;
+  min-height: 90px;
+}
+.wrap-preview img {
+  width: 100%;
+  display: block;
+}
+.wrap-preview i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid #28ddff;
+}
+.wrap-preview span {
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  padding: 3px;
+  background: #17362ecc;
+  color: white;
+}
+.placement-preview {
+  height: 260px;
+  position: relative;
+  margin: 12px 0;
+}
+.placement-preview .library-canvas {
+  height: 100%;
+}
+.genre-editor > div > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.genre-editor input[type='checkbox'] {
+  width: auto;
+}
+.book-preview > button {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+.library-upload progress {
+  max-width: 100%;
+}
+.shelf-navigation {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.collection-organizer {
+  margin-top: 24px;
+}
+.organizer-shelf {
+  position: relative;
+  border: 1px solid #b8c0ae;
+  border-radius: 8px;
+  padding: 14px 14px 14px 44px;
+  margin: 12px 0;
+  background: #f4f1e8;
+}
+.organizer-shelf > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.organizer-shelf > header strong {
+  margin-right: auto;
+}
+.drag-handle {
+  touch-action: none;
+  cursor: grab !important;
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 24px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.organizer-shelf > .drag-handle {
+  position: absolute;
+  left: 8px;
+  top: 12px;
+}
+.organizer-object {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 6px;
+  border-top: 2px solid transparent;
+  background: #e9e8dd;
+  border-radius: 3px;
+  margin: 5px 0;
+}
+.organizer-object h4 {
+  margin: 2px 0;
+}
+.organizer-object small {
+  font-size: 10px;
+}
+.organizer-object-shape {
+  display: block;
+  box-shadow: 2px 2px 0 #0003;
+  flex-shrink: 0;
+}
+.organizer-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.drop-target {
+  border-top-color: #337e71 !important;
+  box-shadow: inset 0 3px #337e71;
+}
+.shelf-end-drop {
+  border: 1px dashed #b0bcad;
+  padding: 10px;
+  font-size: 11px;
+  color: #596759;
+}
+.collection-drag-overlay {
+  background: #285d50;
+  color: white;
+  padding: 14px;
+  border-radius: 5px;
+  box-shadow: 0 8px 20px #0004;
+}
+.shelf-edit-panel {
+  position: fixed;
+  z-index: 1001;
+  inset: 15% 20%;
+  overflow: auto;
+  padding: 25px;
+  background: #f5f1e6;
+  box-shadow: 0 10px 50px #0008;
+  border: 1px solid #728e74;
+}
+.shelf-edit-panel label {
+  display: grid;
+  margin: 10px 0;
+  gap: 5px;
+}
+@media (max-width: 700px) {
+  .organizer-object {
+    flex-wrap: wrap;
+  }
+  .organizer-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .shelf-edit-panel {
+    inset: 5%;
+  }
+  .layer-properties {
+    grid-template-columns: 1fr;
+  }
+  .organizer-shelf > header {
+    flex-wrap: wrap;
+  }
+}
+.zoom-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  min-height: 150px;
+}
+.zoom-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.zoom-content > img {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain;
+  user-select: none;
+}
+.zoom-tools {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  background: #f7f5eced;
+  border-radius: 4px;
+  color: #293d34;
+}
+.artwork-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: #e5e4de;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.artwork-viewer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.artwork-viewer .zoom-surface {
+  flex: 1;
+}
+.pdf-stage > .zoom-surface {
+  height: 100%;
+  width: 100%;
+}
+.pdf-stage .zoom-content > .pdf-book {
+  flex-shrink: 0;
+}
+.surface-studio .studio-controls {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.surface-studio .library-upload {
+  margin-bottom: 12px;
+}
+.surface-studio .studio-controls:disabled .layer-canvas {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.collection-genre-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 24px;
+  border-bottom: 1px solid #d7d4c8;
+  font-size: 11px;
+}
+.collection-genre-filters button {
+  border: 1px solid #b8beb0;
+  border-radius: 3px;
+  background: #eef0e6;
+  color: #354f42;
+  padding: 5px 8px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}

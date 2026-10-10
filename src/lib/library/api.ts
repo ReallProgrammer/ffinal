@@ -12,6 +12,8 @@ export function bookInput(book: LibraryBook): BookInput {
     createdAt: _created,
     category: _category,
     model,
+    artwork,
+    layerAssets: _layerAssets,
     canRead: _read,
     front,
     spine,
@@ -21,6 +23,9 @@ export function bookInput(book: LibraryBook): BookInput {
   } = book;
   return {
     ...metadata,
+    artwork: Object.fromEntries(
+      Object.entries(artwork || {}).map(([role, asset]) => [role, asset?.id || null]),
+    ),
     model: model?.id || null,
     front: front?.id || null,
     spine: spine?.id || null,
@@ -77,12 +82,17 @@ export const libraryApi: LibraryRepository = {
       changed();
     }
   },
-  upload(file: File, kind: AssetKind, progress) {
+  upload(file: File, kind: AssetKind, progress, signal) {
     return new Promise<BookAsset>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', base + '/admin/uploads');
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.timeout = 180000;
+      const abort = () => xhr.abort();
+      signal?.addEventListener('abort', abort, { once: true });
+      xhr.onloadend = () => signal?.removeEventListener('abort', abort);
+      xhr.onabort = () =>
+        reject(new Error('Upload cancelled. Successfully stored files can still be reused.'));
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) progress(Math.round((e.loaded / e.total) * 100));
       };
@@ -111,8 +121,10 @@ export const libraryApi: LibraryRepository = {
       xhr.send(form);
     });
   },
-  async texture(id, signal) {
-    return (await request(`/assets/${encodeURIComponent(id)}`, { signal })).blob();
+  async texture(id, signal, quality = 'overview') {
+    return (
+      await request(`/assets/${encodeURIComponent(id)}?quality=${quality}`, { signal })
+    ).blob();
   },
   async original(id) {
     return (await request(`/assets/${id}?original=1`)).blob();
@@ -122,8 +134,8 @@ export const libraryApi: LibraryRepository = {
       await request(`/admin/assets/${id}/crop`, { method: 'POST', body: JSON.stringify(crop) })
     ).json();
   },
-  async read(book) {
-    return (await request(`/books/${book.id}/read`)).blob();
+  async read(book, role) {
+    return (await request(`/books/${book.id}/read${role ? '?role=manual' : ''}`)).blob();
   },
   async save(book) {
     const response = await mutation(
@@ -136,14 +148,37 @@ export const libraryApi: LibraryRepository = {
   async remove(id) {
     await mutation(`/admin/books/${id}`, 'DELETE');
   },
-  async saveShelf(name, id) {
-    await mutation(id ? `/admin/shelves/${id}` : '/admin/shelves', id ? 'PUT' : 'POST', { name });
+  async saveShelf(name, id, appearance) {
+    await mutation(id ? `/admin/shelves/${id}` : '/admin/shelves', id ? 'PUT' : 'POST', {
+      name,
+      appearance,
+    });
   },
-  async removeShelf(id) {
-    await mutation(`/admin/shelves/${id}`, 'DELETE');
+  async removeShelf(id, moveTo) {
+    await mutation(`/admin/shelves/${id}`, 'DELETE', moveTo ? { moveTo } : undefined);
   },
   async reorder(kind, ids) {
     await mutation(`/admin/${kind}/order`, 'PUT', { ids });
+  },
+  async place(id, shelfId, placement, expectedShelfId) {
+    await mutation(`/admin/items/${id}/place`, 'PUT', { shelfId, ...placement, expectedShelfId });
+  },
+  async saveGenre(name, id) {
+    const r = await mutation(id ? `/admin/genres/${id}` : '/admin/genres', id ? 'PUT' : 'POST', {
+      name,
+    });
+    return id ? { id, name } : r.json();
+  },
+  async removeGenre(id) {
+    await mutation(`/admin/genres/${id}`, 'DELETE');
+  },
+  async split(id, panels) {
+    return (
+      await request(`/admin/assets/${id}/split`, {
+        method: 'POST',
+        body: JSON.stringify({ panels }),
+      })
+    ).json();
   },
   async orphanAssets() {
     return (await request('/admin/assets')).json();

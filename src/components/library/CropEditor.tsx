@@ -6,6 +6,7 @@ import type {
   LibraryBook,
   LibraryRepository,
 } from '../../lib/library/types';
+import { artworkAsset, withArtwork } from '../../lib/library/types';
 import { surfaceRatio, surfaceSize } from '../../lib/library/registry';
 const BookPreview = lazy(() => import('./LibraryScene').then((m) => ({ default: m.BookPreview })));
 export default function CropEditor({
@@ -21,7 +22,7 @@ export default function CropEditor({
   onSave: (asset: BookAsset) => void;
   onClose: () => void;
 }) {
-  const asset = item[surface]!;
+  const asset = artworkAsset(item, surface)!;
   const [crop, setCrop] = useState<Crop>({
     x: asset.crop?.x ?? 0.5,
     y: asset.crop?.y ?? 0.5,
@@ -101,7 +102,7 @@ export default function CropEditor({
     }),
     [repository],
   );
-  const preview = { ...item, [surface]: { ...asset, id: 'crop-preview-' + version } };
+  const preview = withArtwork(item, surface, { ...asset, id: 'crop-preview-' + version });
   const [w, h] = surfaceSize(item, surface);
   return (
     <section className="crop-editor" role="dialog" aria-label={`Crop ${surface} artwork`}>

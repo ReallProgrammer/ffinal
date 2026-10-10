@@ -10,7 +10,7 @@ The collection extends the existing React/Three.js interface, Express API, Postg
 - Cover layers store normalized 2D position, size, rotation, order, lock state, text/font/color and image references. The editor has direct handles, snapping, centering, duplication, deletion and undo/redo. The renderer composites those layers into the object's actual material textures. Existing uploaded art has no automatic metadata overlay.
 - Frame and case presets, material controls and dimension controls persist. Certificates also offer flat artwork viewing. Object/editor zoom follows the pointer; flat artwork and document views support anchored wheel/pinch zoom and panning. PDF pages render from the uploaded PDF at up to 2400 × 3200 pixels with a nearby-page cache.
 - Objects can be placed before a chosen item or at the end of a chosen shelf before saving, with a dimension-aware 3D preview. Drag handles move objects across shelves and reorder shelves; keyboard pickup/cancel and exact placement remain available. Shelf editing includes name, width, depth, spacing and wood tint. Deleting an occupied shelf requires selecting and confirming a destination for its contents.
-- Managed genres are independent many-to-many records; tags remain separate. Optional book numbers, book order and the book-index toggle belong to Books. Other categories retain accessible object navigation without book numbering.
+- Managed genres are independent many-to-many records; visitors can combine genre filters (matching any selected genre), remove individual filters, or clear them. Tags remain separate. Optional book numbers, book order and the book-index toggle belong to Books. Other categories retain accessible object navigation without book numbering.
 - Collection audio uses the taskbar's global sound/volume state. Duplicate collection audio controls are removed. Cue gain and a shared compressor improve audibility and limit peaks; playback still follows browser gesture restrictions.
 
 ## Persistence and permissions
@@ -52,3 +52,13 @@ Run the backend suite with private local test credentials, and the migration tes
 Tests cover all registered formats, owner/public permissions, immutable crops, wrap panel pixels, layer references, high-quality variants, genre persistence, stale placement rejection, occupied-shelf transfers, model conversion and unsafe archives, real uploads, publication, case opening/closing, manual reading, PDF turns, crop preview, layer undo/redo, drag placement, keyboard cancel, flat zoom, responsive layouts and unrelated OS behavior.
 
 Release the backend first, verify its type registry and health, then publish the frontend to GitHub Pages. Compare the live public item/shelf IDs and asset references before and after rollout. Production owner writes are not used for smoke testing; test fixtures stay local. Originals and private records are never copied into the repository or frontend bundle.
+
+### Verified on 2026-10-10
+
+- TypeScript and the production Vite build pass.
+- The production-mode Docker API suite passes 27 tests; its migration case was run separately against an isolated legacy database and passed. The latest API compatibility tests and the native model-import tests also pass.
+- The full desktop/mobile regression runs covered 82 browser cases. Three failures caused by texture-ready timing, fixture pagination and shared trace output were resolved; all eight affected collection/library checks passed together on re-run. Six mobile-only skips are intentional existing desktop-interaction exclusions. The refinement workflow passes on desktop and mobile against the real local API.
+- Combined genre filtering is additionally verified on desktop and mobile, including multi-genre items, adding/removing filters and clearing the selection.
+- Backend rollout preserved all four public item IDs, the two Astro/Astro2 shelf IDs, shelf assignments and primary asset references. Production smoke checks use public reads only.
+
+For concurrent Playwright invocations, use distinct `--output` directories to avoid trace cleanup collisions. Test credentials, local fixtures and deployment snapshots remain outside source control.

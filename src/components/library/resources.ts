@@ -1,18 +1,44 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { useEffect, useState } from 'react';
-import type { LibraryBook, LibraryRepository } from '../../lib/library/types';
+import { artworkAsset } from '../../lib/library/types';
+import type { LibraryBook, LibraryRepository, Surface } from '../../lib/library/types';
 import { objectType, surfaceRatio } from '../../lib/library/registry';
 export interface Resources {
-  maps: Partial<Record<'front' | 'spine' | 'back', THREE.Texture>>;
+  maps: Partial<Record<Surface, THREE.Texture>>;
   model?: THREE.Group;
 }
 interface Entry {
+  detail?: boolean;
   refs: number;
   touched: number;
   promise: Promise<Resources>;
   value?: Resources;
   error?: string;
+}
+const sourceCaches = new WeakMap<LibraryRepository, Map<string, Promise<Blob>>>();
+function sourceBlob(
+  repository: LibraryRepository,
+  id: string,
+  quality: 'overview' | 'detail' = 'overview',
+) {
+  let cache = sourceCaches.get(repository);
+  if (!cache) {
+    cache = new Map();
+    sourceCaches.set(repository, cache);
+  }
+  const key = id + ':' + quality;
+  let pending = cache.get(key);
+  if (!pending) {
+    pending = repository.texture(id, undefined, quality);
+    cache.set(key, pending);
+    pending.catch(() => cache!.delete(key));
+  } else {
+    cache.delete(key);
+    cache.set(key, pending);
+  }
+  while (cache.size > 24) cache.delete(cache.keys().next().value!);
+  return pending;
 }
 const caches = new WeakMap<LibraryRepository, Map<string, Entry>>();
 function dispose(r: Resources) {
@@ -34,7 +60,7 @@ function dispose(r: Resources) {
   });
   images.forEach((image) => image.close());
 }
-function optimizeModelTextures(model: THREE.Group) {
+function optimizeModelTextures(model: THREE.Group, detail: boolean) {
   const textures = new Set<THREE.Texture>();
   model.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -49,12 +75,19 @@ function optimizeModelTextures(model: THREE.Group) {
   type Source = CanvasImageSource & { width: number; height: number };
   const sources = [...new Set([...textures].map((texture) => texture.image as Source))];
   const pixels = sources.reduce((total, image) => total + image.width * image.height, 0);
-  const budget = innerWidth < 700 ? 2_000_000 : 4_000_000;
+  const budget = detail
+    ? innerWidth < 700
+      ? 6_000_000
+      : 12_000_000
+    : innerWidth < 700
+      ? 2_000_000
+      : 4_000_000;
+  const edge = detail ? 2048 : 1024;
   for (const source of sources) {
     const scale = Math.min(
       1,
-      1024 / source.width,
-      1024 / source.height,
+      edge / source.width,
+      edge / source.height,
       Math.sqrt(budget / pixels),
     );
     if (scale >= 1) continue;
@@ -75,16 +108,21 @@ function trim(cache: Map<string, Entry>) {
   const unused = [...cache.entries()]
     .filter(([, e]) => !e.refs)
     .sort((a, b) => a[1].touched - b[1].touched);
-  let models = unused.filter(([, entry]) => entry.value?.model).length;
+  let models = unused.filter(([, entry]) => entry.value?.model || entry.detail).length;
   for (const [k, e] of unused) {
-    if (cache.size <= 12 && Date.now() - e.touched < 60000 && (!e.value?.model || models <= 2))
+    if (
+      cache.size <= 12 &&
+      Date.now() - e.touched < 60000 &&
+      (!(e.value?.model || e.detail) || models <= 2)
+    )
       continue;
-    if (e.value?.model) models--;
+    if (e.value?.model || e.detail) models--;
     if (e.value) dispose(e.value);
     cache.delete(k);
   }
 }
 export function clearCollectionCache(repository: LibraryRepository) {
+  sourceCaches.delete(repository);
   const cache = caches.get(repository);
   if (!cache) return;
   for (const [k, e] of cache) {
@@ -100,6 +138,11 @@ function key(item: LibraryBook) {
     item.spine?.id,
     item.back?.id,
     item.model?.id,
+    item.artwork,
+    item.layers,
+    item.presentation?.frameWidth,
+    item.presentation?.frame,
+    item.presentation?.casePreset,
     item.width,
     item.height,
     item.thickness,
@@ -108,22 +151,43 @@ function key(item: LibraryBook) {
     item.presentation?.textOverlay ? item.title : '',
   ]);
 }
-async function load(item: LibraryBook, repository: LibraryRepository): Promise<Resources> {
+async function load(
+  item: LibraryBook,
+  repository: LibraryRepository,
+  detail: boolean,
+): Promise<Resources> {
   const result: Resources = { maps: {} };
   try {
-    for (const face of (objectType(item).geometry === 'model' ? [] : objectType(item).surfaces) as (
-      'front' | 'spine' | 'back'
-    )[]) {
+    for (const face of (objectType(item).geometry === 'model'
+      ? []
+      : [
+          ...objectType(item).surfaces,
+          ...objectType(item).contents.filter((role) => role !== 'manual'),
+        ]) as Surface[]) {
+      if (
+        !artworkAsset(item, face) &&
+        !item.layers?.[face]?.length &&
+        !item.presentation?.textOverlay
+      )
+        continue;
       const ratio = surfaceRatio(item, face);
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(16, Math.round(Math.min(1024, 1024 * ratio)));
+      canvas.width = Math.max(
+        16,
+        Math.round(
+          Math.min(
+            detail ? (innerWidth < 700 ? 2048 : 3072) : 1024,
+            (detail ? (innerWidth < 700 ? 2048 : 3072) : 1024) * ratio,
+          ),
+        ),
+      );
       canvas.height = Math.max(16, Math.round(canvas.width / ratio));
       const ctx = canvas.getContext('2d')!;
       ctx.fillStyle = item.color;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const asset = item[face];
+      const asset = artworkAsset(item, face);
       if (asset) {
-        const blob = await repository.texture(asset.id);
+        const blob = await sourceBlob(repository, asset.id, detail ? 'detail' : 'overview');
         const bitmap = await createImageBitmap(blob);
         try {
           const scale = Math.max(canvas.width / bitmap.width, canvas.height / bitmap.height);
@@ -146,6 +210,28 @@ async function load(item: LibraryBook, repository: LibraryRepository): Promise<R
           ctx.stroke();
         }
       }
+      for (const layer of item.layers?.[face] || []) {
+        ctx.save();
+        ctx.translate(layer.x * canvas.width, layer.y * canvas.height);
+        ctx.rotate((layer.rotation * Math.PI) / 180);
+        const w = layer.width * canvas.width,
+          h = layer.height * canvas.height;
+        if (layer.type === 'image' && layer.assetId) {
+          const bitmap = await createImageBitmap(
+            await sourceBlob(repository, layer.assetId, detail ? 'detail' : 'overview'),
+          );
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
+          bitmap.close();
+        } else if (layer.type === 'text') {
+          ctx.fillStyle = layer.color;
+          ctx.font = `${h * 0.72}px ${layer.font}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(layer.text || '', 0, 0, w);
+        }
+        ctx.restore();
+      }
       if (item.presentation?.textOverlay) {
         ctx.fillStyle = '#fff';
         ctx.shadowColor = '#000';
@@ -156,11 +242,13 @@ async function load(item: LibraryBook, repository: LibraryRepository): Promise<R
       }
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = 4;
+      texture.anisotropy = 16;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
       result.maps[face] = texture;
     }
     if (item.model) {
-      const bytes = await (await repository.texture(item.model.id)).arrayBuffer();
+      const bytes = await (await sourceBlob(repository, item.model.id)).arrayBuffer();
       const manager = new THREE.LoadingManager();
       manager.setURLModifier((url) => {
         if (!url.startsWith('data:') && !url.startsWith('blob:'))
@@ -173,7 +261,7 @@ async function load(item: LibraryBook, repository: LibraryRepository): Promise<R
         '',
       );
       result.model = gltf.scene;
-      optimizeModelTextures(result.model);
+      optimizeModelTextures(result.model, detail);
       result.model.traverse((o) => {
         if (o instanceof THREE.Mesh) {
           o.castShadow = true;
@@ -190,9 +278,16 @@ async function load(item: LibraryBook, repository: LibraryRepository): Promise<R
 export function useResources(
   item: LibraryBook,
   repository: LibraryRepository,
+  detail = false,
 ): { value?: Resources; error?: string } {
-  const resourceKey = key(item);
-  const [state, setState] = useState<{ key: string; value?: Resources; error?: string }>({
+  const baseKey = key(item);
+  const resourceKey = baseKey + (detail ? 'detail' : 'overview');
+  const [state, setState] = useState<{
+    key: string;
+    base?: string;
+    value?: Resources;
+    error?: string;
+  }>({
     key: '',
   });
   useEffect(() => {
@@ -204,10 +299,10 @@ export function useResources(
     }
     let entry = cache.get(resourceKey);
     if (!entry) {
-      entry = { refs: 0, touched: Date.now(), promise: Promise.resolve({ maps: {} }) };
+      entry = { detail, refs: 0, touched: Date.now(), promise: Promise.resolve({ maps: {} }) };
       cache.set(resourceKey, entry);
       const e = entry;
-      e.promise = load(item, repository)
+      e.promise = load(item, repository, detail)
         .then((r) => {
           if (cache!.get(resourceKey) !== e) {
             dispose(r);
@@ -223,10 +318,29 @@ export function useResources(
     }
     entry.refs++;
     const current = entry;
-    setState({ key: resourceKey, value: entry.value, error: entry.error });
+    const overview = detail ? cache.get(baseKey + 'overview') : undefined;
+    if (overview) {
+      overview.refs++;
+      overview.promise
+        .then((value) => {
+          if (active && !current.error)
+            setState((previous) =>
+              previous.key === resourceKey && previous.value
+                ? previous
+                : { key: resourceKey, base: baseKey, value },
+            );
+        })
+        .catch(() => {});
+    }
+    setState((previous) => ({
+      key: resourceKey,
+      base: baseKey,
+      value: entry.value || (previous.base === baseKey ? previous.value : undefined),
+      error: entry.error,
+    }));
     entry.promise
       .then((value) => {
-        if (active) setState({ key: resourceKey, value });
+        if (active) setState({ key: resourceKey, base: baseKey, value });
       })
       .catch(() => {
         if (active)
@@ -236,10 +350,14 @@ export function useResources(
     return () => {
       active = false;
       current.refs--;
+      if (overview) {
+        overview.refs--;
+        overview.touched = Date.now();
+      }
       current.touched = Date.now();
       const target = cache;
       setTimeout(() => trim(target!), 61000);
     };
   }, [resourceKey, repository]);
-  return state.key === resourceKey ? state : {};
+  return state.key === resourceKey ? state : state.base === baseKey ? { value: state.value } : {};
 }

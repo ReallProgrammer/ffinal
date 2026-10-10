@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ZoomSurface from './ZoomSurface';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -127,7 +128,7 @@ export default function PdfReader({
             const original = p.getViewport({ scale: 1 });
             if (n === 1) setAspect(original.width / original.height);
             const viewport = p.getViewport({
-              scale: Math.min(1.8, 1200 / original.width, 1600 / original.height),
+              scale: Math.min(4, 2400 / original.width, 3200 / original.height),
             });
             const canvas = window.document.createElement('canvas');
             canvas.width = Math.ceil(viewport.width);
@@ -137,7 +138,7 @@ export default function PdfReader({
               canvas.toBlob(
                 (b) => (b ? resolve(b) : reject(new Error('Render failed'))),
                 'image/webp',
-                0.92,
+                0.98,
               ),
             );
             canvas.width = 0;
@@ -282,72 +283,78 @@ export default function PdfReader({
       </nav>
       {error && <p role="alert">{error}</p>}
       <div className="pdf-stage" ref={stage}>
-        <div
-          className={`pdf-book ${rtl ? 'rtl' : ''}`}
-          style={
-            {
-              '--page-ratio': aspect,
-              width:
-                Math.max(
-                  160,
-                  Math.min(900, stageSize.width * 0.92, (stageSize.height - 24) * aspect * 2),
-                ) * zoom,
-            } as React.CSSProperties
-          }
-        >
-          {cover && coverUrl ? (
-            <button
-              className="pdf-cover"
-              onClick={() => setCover(false)}
-              aria-label="Open document cover"
-            >
-              <img src={coverUrl} alt={`${title} cover`} />
-            </button>
-          ) : (
-            document && (
-              <>
-                <div className="pdf-spread">
-                  {displayed.map((n, index) => (
-                    <button
-                      key={index}
-                      className="pdf-paper"
-                      aria-label={index === 0 ? 'Turn previous page' : 'Turn next page'}
-                      onClick={() => void go(index === 0 ? -1 : 1)}
+        <ZoomSurface label="Zoomable document">
+          <div
+            className={`pdf-book ${rtl ? 'rtl' : ''}`}
+            style={
+              {
+                '--page-ratio': aspect,
+                width:
+                  Math.max(
+                    160,
+                    Math.min(900, stageSize.width * 0.92, (stageSize.height - 24) * aspect * 2),
+                  ) * zoom,
+              } as React.CSSProperties
+            }
+          >
+            {cover && coverUrl ? (
+              <button
+                className="pdf-cover"
+                onClick={() => setCover(false)}
+                aria-label="Open document cover"
+              >
+                <img src={coverUrl} alt={`${title} cover`} />
+              </button>
+            ) : (
+              document && (
+                <>
+                  <div className="pdf-spread">
+                    {displayed.map((n, index) => (
+                      <button
+                        key={index}
+                        className="pdf-paper"
+                        aria-label={index === 0 ? 'Turn previous page' : 'Turn next page'}
+                        onClick={() => void go(index === 0 ? -1 : 1)}
+                      >
+                        {n <= document.numPages ? (
+                          <PageImage page={n} load={load} />
+                        ) : (
+                          <span>End of document</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {turn && (
+                    <div
+                      className={`pdf-turn ${turn.direction === 1 ? 'forward' : 'backward'}`}
+                      key={`${turn.from}-${turn.to}`}
                     >
-                      {n <= document.numPages ? (
-                        <PageImage page={n} load={load} />
-                      ) : (
-                        <span>End of document</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                {turn && (
-                  <div
-                    className={`pdf-turn ${turn.direction === 1 ? 'forward' : 'backward'}`}
-                    key={`${turn.from}-${turn.to}`}
-                  >
-                    <div className="pdf-turn-front">
-                      {(turn.direction === 1 ? turn.from + 1 : turn.from) <= document.numPages && (
+                      <div className="pdf-turn-front">
+                        {(turn.direction === 1 ? turn.from + 1 : turn.from) <=
+                          document.numPages && (
+                          <PageImage
+                            page={turn.direction === 1 ? turn.from + 1 : turn.from}
+                            load={load}
+                          />
+                        )}
+                      </div>
+                      <div className="pdf-turn-back">
                         <PageImage
-                          page={turn.direction === 1 ? turn.from + 1 : turn.from}
+                          page={turn.direction === 1 ? turn.to : turn.to + 1}
                           load={load}
                         />
-                      )}
+                      </div>
                     </div>
-                    <div className="pdf-turn-back">
-                      <PageImage page={turn.direction === 1 ? turn.to : turn.to + 1} load={load} />
-                    </div>
-                  </div>
-                )}
-              </>
-            )
-          )}
-        </div>
+                  )}
+                </>
+              )
+            )}
+          </div>
+        </ZoomSurface>
       </div>
       <p className="pdf-hint">
-        Click the page edges or use ← → · pinch / browser zoom for finer detail · original pages,
-        rendered from your PDF
+        Click the page edges or use ← → · scroll or pinch at a point for finer detail · original
+        pages, rendered from your PDF
       </p>
     </div>
   );

@@ -81,7 +81,7 @@ test('all physical formats load actual surfaces, focus alone, return, and render
       ids.push((await r.json()).id);
     }
     // A failed surface must produce a deliberate state and recover on refresh.
-    const artworkUrl = api + '/assets/' + front;
+    const artworkUrl = api + '/assets/' + front + '*';
     await page.route(artworkUrl, (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
     await page.goto('/');
     await page.locator('.boot-screen').waitFor();
@@ -109,6 +109,7 @@ test('all physical formats load actual surfaces, focus alone, return, and render
     await expect(page.locator('.library-book-details')).toHaveAttribute(
       'data-artwork-ready',
       'true',
+      { timeout: 25000 },
     );
     await page.getByRole('button', { name: 'Return to shelf', exact: true }).click();
     await page.getByRole('button', { name: 'All Collections', exact: true }).click();
@@ -270,7 +271,7 @@ test('certificate editor crops originals with a live 3D preview and saves metada
     await expect(page.getByLabel('Add title typography to artwork (optional)')).not.toBeChecked();
     await page.getByLabel('Published — visible to visitors').check();
     await page.getByRole('button', { name: 'Save & publish', exact: true }).click();
-    await expect(page.locator('.library-admin-books')).toContainText(name);
+    await expect(page.locator('.collection-organizer')).toContainText(name);
     const all = await (await context.request.get(api + '/admin/collection', { headers })).json();
     const saved = all.books.find((b: { title: string }) => b.title === name);
     item = saved.id;

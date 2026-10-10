@@ -66,12 +66,15 @@ export default function Reader({
   repository,
   onClose,
   active = true,
+  role,
 }: {
   book: LibraryBook;
   repository: LibraryRepository;
   onClose: () => void;
   active?: boolean;
+  role?: 'manual';
 }) {
+  const documentAsset = role === 'manual' ? book.artwork?.manual : book.digital;
   const [coverUrl, setCoverUrl] = useState('');
   useEffect(() => {
     let active = true,
@@ -99,7 +102,7 @@ export default function Reader({
     let active = true,
       objectUrl = '';
     repository
-      .read(book)
+      .read(book, role)
       .then(async (blob) => {
         objectUrl = URL.createObjectURL(blob);
         if (!active) {
@@ -107,7 +110,7 @@ export default function Reader({
           return;
         }
         setUrl(objectUrl);
-        if (book.digital?.mime === 'application/epub+zip') {
+        if (documentAsset?.mime === 'application/epub+zip') {
           const content = await readEpub(blob);
           if (active) setChapters(content);
         }
@@ -119,7 +122,7 @@ export default function Reader({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [book, repository]);
+  }, [book, repository, role]);
   return (
     <section className="library-reader" role="dialog" aria-label={`Reading ${book.title}`}>
       <header>
@@ -133,7 +136,7 @@ export default function Reader({
       </header>
       {error && <p role="alert">{error}</p>}
       {!url && !error && <div className="library-loading">Opening your book…</div>}
-      {url && book.digital?.mime === 'application/pdf' && (
+      {url && documentAsset?.mime === 'application/pdf' && (
         <Suspense fallback={<p>Preparing document reader…</p>}>
           <PdfReader url={url} title={book.title} coverUrl={coverUrl} active={active} />
         </Suspense>
@@ -192,7 +195,7 @@ export default function Reader({
           {chapters.length > 0 ? ' · Reflowable text edition' : ''}
         </span>
         {url && (
-          <a className="xp-button" href={url} download={book.digital?.filename}>
+          <a className="xp-button" href={url} download={documentAsset?.filename}>
             Download edition
           </a>
         )}
