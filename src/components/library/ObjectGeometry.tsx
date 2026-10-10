@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import type { LibraryBook } from '../../lib/library/types';
 import { objectType } from '../../lib/library/registry';
 import type { Resources } from './resources';
+import MediaCase from './MediaCase';
+import { framePreset } from '../../lib/library/presets';
 type V = [number, number, number];
 function Box({
   size,
@@ -55,6 +57,9 @@ function Ring({ position, radius = 0.22 }: { position: V; radius?: number }) {
 interface Props {
   item: LibraryBook;
   resources: Resources;
+  open?: boolean;
+  onToggle?: () => void;
+  reduced?: boolean;
 }
 function Book({ item: i, resources: r }: Props) {
   const { width: w, height: h, thickness: d } = i;
@@ -81,30 +86,57 @@ function Book({ item: i, resources: r }: Props) {
   );
 }
 function Certificate({ item: i, resources: r }: Props) {
-  const { width: w, height: h, thickness: d } = i;
-  const f = i.presentation?.frame !== false ? 0.075 : 0;
+  const { width: w, height: h, thickness: d } = i,
+    p = i.presentation,
+    preset = framePreset(i);
+  const f = p?.frame === false ? 0 : Math.min(p?.frameWidth || preset.width, Math.min(w, h) * 0.22),
+    color = p?.frameColor || preset.color;
   return (
     <>
-      <Box size={[w, h, d]} color="#ded4be" front={r.maps.front} back={r.maps.back} />
-      {f > 0 && (
-        <>
-          {[-1, 1].map((s) => (
-            <group key={s}>
-              <Box
-                size={[w + 0.02, f, d + 0.03]}
-                position={[0, (s * (h - f)) / 2, 0]}
-                color={i.color}
-                roughness={0.32}
+      <Box size={[w, h, d]} color={p?.backingColor || preset.backing} back={r.maps.back} />
+      <Box
+        size={[w - f * 2, h - f * 2, 0.01]}
+        position={[0, 0, d / 2 + 0.007]}
+        front={r.maps.front}
+        color="#f4f1e9"
+      />
+      {f > 0 &&
+        [-1, 1].map((side) => (
+          <group key={side}>
+            <mesh position={[0, (side * (h - f)) / 2, 0.008]} castShadow>
+              <boxGeometry args={[w, f, d + 0.05]} />
+              <meshStandardMaterial
+                color={color}
+                metalness={preset.metalness}
+                roughness={preset.id === 'wood' ? 0.72 : 0.38}
               />
+            </mesh>
+            <mesh position={[(side * (w - f)) / 2, 0, 0.008]} castShadow>
+              <boxGeometry args={[f, h, d + 0.05]} />
+              <meshStandardMaterial color={color} metalness={preset.metalness} roughness={0.38} />
+            </mesh>
+            {preset.id === 'academic' && (
               <Box
-                size={[f, h, d + 0.03]}
-                position={[(s * (w - f)) / 2, 0, 0]}
-                color={i.color}
-                roughness={0.32}
+                size={[w - f * 2, 0.014, 0.014]}
+                position={[0, side * (h / 2 - f), d / 2 + 0.025]}
+                color="#c4aa62"
               />
-            </group>
-          ))}
-        </>
+            )}
+          </group>
+        ))}
+      {(p?.glass ?? preset.glass) && (
+        <mesh position={[0, 0, d / 2 + 0.028]}>
+          <boxGeometry args={[w - f * 2, h - f * 2, 0.004]} />
+          <meshPhysicalMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.055}
+            roughness={0.12}
+            transmission={0.9}
+            thickness={0.004}
+            depthWrite={false}
+          />
+        </mesh>
       )}
     </>
   );
@@ -271,7 +303,13 @@ function Model({ item, resources }: Props) {
       item.height / Math.max(size.y, 0.001),
       item.thickness / Math.max(size.z, 0.001),
     );
-    group.scale.setScalar(scale);
+    group.scale.setScalar(scale * 0.9);
+    const offset = item.presentation?.offset || [0, 0, 0];
+    group.position.set(
+      offset[0] * item.width * 0.2,
+      offset[1] * item.height * 0.2,
+      offset[2] * item.thickness * 0.2,
+    );
     return group;
   }, [
     resources.model,
@@ -279,13 +317,14 @@ function Model({ item, resources }: Props) {
     item.height,
     item.thickness,
     JSON.stringify(item.presentation?.rotation),
+    JSON.stringify(item.presentation?.offset),
   ]);
   return object ? <primitive object={object} dispose={null} /> : null;
 }
 const geometries: Record<string, React.ComponentType<Props>> = {
   book: Book,
   certificate: Certificate,
-  case: Case,
+  case: MediaCase,
   vhs: Case,
   cassette: Cassette,
   tape: Tape,

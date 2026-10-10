@@ -7,7 +7,14 @@ export function unlockAudio() {
     audio ??= new AudioContext();
     if (!master) {
       master = audio.createGain();
-      master.connect(audio.destination);
+      const limiter = audio.createDynamicsCompressor();
+      limiter.threshold.value = -6;
+      limiter.knee.value = 6;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.15;
+      master.connect(limiter);
+      limiter.connect(audio.destination);
     }
     if (audio.state === 'suspended') void audio.resume().catch(() => {});
   } catch {
@@ -42,7 +49,7 @@ export function playSound(kind: SoundKind, volume: number) {
       filter.type = 'bandpass';
       filter.frequency.value = kind === 'disk' ? 760 : 1800;
       const gain = context.createGain();
-      gain.gain.value = kind === 'disk' ? 0.24 : 0.12;
+      gain.gain.value = kind === 'disk' ? 0.3 : 0.24;
       source.connect(filter);
       filter.connect(gain);
       gain.connect(output);
@@ -76,7 +83,7 @@ export function playSound(kind: SoundKind, volume: number) {
       osc.type = kind === 'post' ? 'square' : 'sine';
       osc.frequency.value = frequency;
       gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(kind === 'post' ? 0.1 : long ? 0.2 : 0.1, start + 0.015);
+      gain.gain.linearRampToValueAtTime(kind === 'post' ? 0.1 : long ? 0.24 : 0.2, start + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
       osc.connect(gain);
       gain.connect(output);

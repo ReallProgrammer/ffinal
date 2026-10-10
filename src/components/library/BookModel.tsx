@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { LibraryBook, LibraryRepository } from '../../lib/library/types';
 import { useResources } from './resources';
 import ObjectGeometry from './ObjectGeometry';
+import ObjectSkeleton from './ObjectSkeleton';
 export default function BookModel({
   book,
   repository,
@@ -15,6 +16,8 @@ export default function BookModel({
   onHover,
   reduced = false,
   inspection = false,
+  caseOpen,
+  onToggleCase,
   onReady,
   onError,
 }: {
@@ -28,11 +31,13 @@ export default function BookModel({
   onHover?: (value: boolean) => void;
   reduced?: boolean;
   inspection?: boolean;
+  caseOpen?: boolean;
+  onToggleCase?: () => void;
   onReady?: (ready: boolean) => void;
   onError?: (error: string) => void;
 }) {
   const group = useRef<THREE.Group>(null);
-  const resource = useResources(book, repository);
+  const resource = useResources(book, repository, selected || inspection);
   const scale = book.presentation?.scale || 1;
   const placed = useRef(0);
   useEffect(() => {
@@ -77,15 +82,16 @@ export default function BookModel({
     >
       {resource.value ? (
         <group scale={scale}>
-          <ObjectGeometry item={book} resources={resource.value} />
+          <ObjectGeometry
+            item={book}
+            resources={resource.value}
+            open={caseOpen}
+            onToggle={onToggleCase}
+            reduced={reduced}
+          />
         </group>
       ) : (
-        <>
-          <mesh>
-            <boxGeometry args={[book.width * 0.7, book.height * 0.7, 0.08]} />
-            <meshStandardMaterial color={resource.error ? '#884841' : '#aeb7ad'} wireframe />
-          </mesh>
-        </>
+        <ObjectSkeleton item={book} error={Boolean(resource.error)} reduced={reduced} />
       )}
     </group>
   );

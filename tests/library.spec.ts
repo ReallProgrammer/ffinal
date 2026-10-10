@@ -18,6 +18,10 @@ test('public library preserves OS controls and offers no editing or upload field
   await shelf(page);
   await expect(page.locator('.library-app input[type=file]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add book', exact: true })).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: 'Collection categories' })
+    .getByRole('button', { name: 'Books', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Index', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search collection' }).fill('No such edition');
   await expect(page.locator('.library-empty')).toContainText('Nothing on this shelf');
@@ -74,7 +78,7 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await expect(page.getByRole('region', { name: 'Owner library management' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Shelf name' }).fill(shelfName);
     await page.getByRole('button', { name: 'Add shelf', exact: true }).click();
-    await expect(page.locator('.library-admin-shelves')).toContainText(shelfName);
+    await expect(page.locator('.collection-organizer')).toContainText(shelfName);
     createdShelf = (
       await (await context.request.get(api + '/admin/library', { headers })).json()
     ).shelves.find((s: { name: string }) => s.name === shelfName).id;
@@ -88,16 +92,23 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page
       .getByLabel('Description', { exact: true })
       .fill('An actual uploaded edition, stored by the server.');
-    await page.getByLabel('Genre', { exact: true }).fill('Testing');
+    await page.getByLabel('Genre name', { exact: true }).fill('Testing ' + suffix);
+    await page.getByRole('button', { name: 'Add genre', exact: true }).click();
+    await page
+      .locator('.genre-editor label')
+      .filter({ hasText: 'Testing ' + suffix })
+      .getByRole('checkbox')
+      .check();
     await page.getByLabel('Shelf', { exact: true }).selectOption({ label: shelfName });
     await page
       .getByLabel('Upload front', { exact: true })
       .setInputFiles('/tmp/library-fixtures/cover.png');
-    await expect(page.locator('.library-upload').first()).toContainText('cover.png');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('cover.png');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('Ready');
     await page
       .getByLabel('Upload digital', { exact: true })
       .setInputFiles('/tmp/library-fixtures/edition.pdf');
-    await expect(page.locator('.library-upload').last()).toContainText('edition.pdf');
+    await expect(page.locator('.library-upload[data-kind=digital]')).toContainText('edition.pdf');
     await expect(page.locator('.book-preview canvas')).toBeVisible();
     await expect(page.locator('.book-preview')).toHaveAttribute('data-textures-ready', 'true', {
       timeout: 20000,
@@ -105,7 +116,7 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page.getByLabel('Reading access', { exact: true }).selectOption('public');
     await page.getByLabel('Published — visible to visitors').check();
     await page.getByRole('button', { name: 'Save & publish', exact: true }).click();
-    await expect(page.locator('.library-admin-books')).toContainText(title);
+    await expect(page.locator('.collection-organizer')).toContainText(title);
     const stored = await (await context.request.get(api + '/admin/library', { headers })).json();
     const saved = stored.books.find((b: { title: string }) => b.title === title);
     createdBook = saved.id;
@@ -154,6 +165,7 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page.locator('.run-app input').fill('shelf');
     await page.locator('.run-app input').press('Enter');
     await page.getByRole('button', { name: 'All Collections', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Choose shelf' }).selectOption(createdShelf);
     await expect(page.locator('.library-index')).toContainText(title);
     await expect(page.locator('.library-app input[type=file]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Owner access', exact: true }).click();
@@ -164,14 +176,15 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page
       .getByLabel('Upload front', { exact: true })
       .setInputFiles('/tmp/library-fixtures/revised.png');
-    await expect(page.locator('.library-upload').first()).toContainText('revised.png');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('revised.png');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('Ready');
     await page
       .getByLabel('Upload digital', { exact: true })
       .setInputFiles('/tmp/library-fixtures/edition.epub');
-    await expect(page.locator('.library-upload').last()).toContainText('edition.epub');
+    await expect(page.locator('.library-upload[data-kind=digital]')).toContainText('edition.epub');
     await expect(page.locator('.book-preview')).toHaveAttribute('data-textures-ready', 'true');
     await page.getByRole('button', { name: 'Save & publish', exact: true }).click();
-    await expect(page.locator('.library-admin-books')).toContainText(title);
+    await expect(page.locator('.collection-organizer')).toContainText(title);
     const revised = (
       await (await context.request.get(api + '/admin/library', { headers })).json()
     ).books.find((b: { id: string }) => b.id === createdBook);

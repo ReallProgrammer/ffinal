@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { BookOpen, LockKeyhole, Search, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { useDesktop } from '../../lib/DesktopContext';
 import { libraryApi } from '../../lib/library/api';
@@ -8,6 +8,7 @@ import type { ShelfItem } from '../../lib/shelf/repository';
 import MenuBar from '../MenuBar';
 import LibraryAdmin from '../library/LibraryAdmin';
 import Reader from '../library/Reader';
+import ArtworkViewer from '../library/ArtworkViewer';
 import CollectionThumbnail from '../library/CollectionThumbnail';
 import '../../library.css';
 import { categories, objectType } from '../../lib/library/registry';
@@ -26,6 +27,7 @@ export default function Shelf({
   initialView?: 'library' | 'archive';
 }) {
   const { settings, setSettings } = useDesktop();
+  const sceneArea = useRef<HTMLDivElement>(null);
   const reduced = settings.reducedMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [data, setData] = useState<LibraryData>(empty),
     [owner, setOwner] = useState(repository.isOwner()),
@@ -33,7 +35,7 @@ export default function Shelf({
   const [loading, setLoading] = useState(repository.configured),
     [error, setError] = useState(''),
     [search, setSearch] = useState(''),
-    [genre, setGenre] = useState(''),
+    [genres, setGenres] = useState<string[]>([]),
     [sort, setSort] = useState('shelf'),
     [shelf, setShelf] = useState('');
   const [selected, setSelected] = useState(''),
@@ -41,7 +43,9 @@ export default function Shelf({
     [zoom, setZoom] = useState(1),
     [reading, setReading] = useState<LibraryBook | null>(null),
     [indexOpen, setIndexOpen] = useState(false),
-    [page, setPage] = useState(0);
+    [page, setPage] = useState(0),
+    [artwork, setArtwork] = useState<LibraryBook | null>(null),
+    [readingRole, setReadingRole] = useState<'manual' | undefined>();
   const [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
     [signing, setSigning] = useState(false),
@@ -51,11 +55,13 @@ export default function Shelf({
   const [sceneVersion, setSceneVersion] = useState(0);
   const [category, setCategory] = useState('certificates'),
     [autoRotate, setAutoRotate] = useState(false),
-    [resetKey, setResetKey] = useState(0);
+    [resetKey, setResetKey] = useState(0),
+    [caseOpen, setCaseOpen] = useState(false);
   const cue = (kind: 'open' | 'close') => {
-    if (settings.sound) playSound(kind, settings.volume * 0.35);
+    if (settings.sound) playSound(kind, settings.volume);
   };
   const returnToShelf = () => {
+    setCaseOpen(false);
     setSelected('');
     setZoom(1);
     cue('close');
@@ -100,7 +106,9 @@ export default function Shelf({
     if (!active) return;
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !e.defaultPrevented) {
-        if (reading) setReading(null);
+        if (artwork) setArtwork(null);
+        else if (reading) setReading(null);
+        else if (caseOpen) setCaseOpen(false);
         else if (selected) {
           returnToShelf();
         } else if (mode !== 'library') setMode('library');
@@ -108,15 +116,16 @@ export default function Shelf({
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [active, selected, reading, mode]);
+  }, [active, selected, reading, mode, caseOpen, artwork]);
   const books = data.books
     .filter(
       (b) =>
         b.published &&
         (category === 'all' || objectType(b).category === category) &&
         (!shelf || b.shelfId === shelf) &&
-        (!genre || b.genre === genre) &&
-        `${b.title} ${b.author} ${Object.values(b.details || {}).join(' ')}`
+        (!genres.length ||
+          genres.some((genre) => b.genre === genre || b.genreIds?.includes(genre))) &&
+        `${b.title} ${b.author} ${(b.tags || []).join(' ')} ${Object.values(b.details || {}).join(' ')}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
@@ -127,8 +136,20 @@ export default function Shelf({
           ? a.author.localeCompare(b.author)
           : sort === 'year'
             ? (b.year || 0) - (a.year || 0)
-            : a.position - b.position,
+            : sort === 'bookOrder'
+              ? (a.bookOrder ?? a.position) - (b.bookOrder ?? b.position)
+              : a.position - b.position,
     );
+  useEffect(() => {
+    if (!reduced)
+      sceneArea.current?.animate(
+        [
+          { opacity: 0.35, transform: 'translateX(12px)' },
+          { opacity: 1, transform: 'translateX(0)' },
+        ],
+        { duration: 260, easing: 'ease-out' },
+      );
+  }, [shelf, reduced]);
   const pageSize = innerWidth < 700 ? 8 : 16;
   const pageBooks = books.slice(page * pageSize, (page + 1) * pageSize);
   const current = data.books.find((b) => b.id === selected && b.published);
@@ -137,7 +158,7 @@ export default function Shelf({
     setPage(0);
     setSelected('');
     setZoom(1);
-  }, [search, genre, sort, shelf, pageSize, category]);
+  }, [search, genres, sort, shelf, pageSize, category]);
   useEffect(() => {
     if (initialView === 'archive')
       void shelfRepository
@@ -147,11 +168,41 @@ export default function Shelf({
   }, [initialView]);
   const inspect = (id: string) => {
     cue('open');
+    setCaseOpen(false);
     setSelected(id);
     setZoom(1);
     setArtworkReady(false);
     setArtworkError('');
   };
+  const browseShelf = (direction: number) => {
+    const index = data.shelves.findIndex((s) => s.id === shelf);
+    const next = data.shelves[Math.max(0, Math.min(data.shelves.length - 1, index + direction))];
+    if (next) {
+      setSelected('');
+      setCaseOpen(false);
+      setShelf(next.id);
+    }
+  };
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (
+        !active ||
+        mode !== 'library' ||
+        selected ||
+        reading ||
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      )
+        return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        browseShelf(e.key === 'ArrowRight' ? 1 : -1);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [active, mode, selected, reading, shelf, data.shelves]);
   const ownerAccess = () => {
     setError('');
     setMode(repository.isOwner() ? 'manage' : 'login');
@@ -173,7 +224,15 @@ export default function Shelf({
             items: [
               { label: 'Browse books', action: () => setMode('library') },
               { label: 'Refresh', action: () => void load() },
-              { label: 'Book index', checked: indexOpen, action: () => setIndexOpen(!indexOpen) },
+              ...(category === 'books'
+                ? [
+                    {
+                      label: 'Book index',
+                      checked: indexOpen,
+                      action: () => setIndexOpen(!indexOpen),
+                    },
+                  ]
+                : []),
               { label: 'Local collection archive', action: () => void localArchive() },
             ],
           },
@@ -268,6 +327,17 @@ export default function Shelf({
               <p>Uploads and editing stay disabled until that service is available.</p>
             </div>
           )}
+          {!!genres.length && (
+            <div className="collection-genre-filters" aria-label="Active genre filters">
+              <span>Matching any selected genre:</span>
+              {genres.map((id) => (
+                <button key={id} onClick={() => setGenres(genres.filter((value) => value !== id))}>
+                  {data.genres?.find((g) => g.id === id)?.name || id} ×
+                </button>
+              ))}
+              <button onClick={() => setGenres([])}>Clear genres</button>
+            </div>
+          )}
           {error && (
             <p className="library-error" role="alert">
               {error}
@@ -340,35 +410,51 @@ export default function Shelf({
             </label>
             <select
               aria-label="Filter genre"
-              value={genre}
-              onChange={(e) => setGenre(e.target.value)}
+              value=""
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id && !genres.includes(id)) setGenres([...genres, id]);
+              }}
             >
-              <option value="">Every genre</option>
-              {[
-                ...new Set(
-                  data.books
-                    .filter((b) => b.published)
-                    .map((b) => b.genre)
-                    .filter(Boolean),
-                ),
-              ].map((g) => (
-                <option key={g}>{g}</option>
-              ))}
+              <option value="">{genres.length ? 'Add another genre…' : 'Every genre'}</option>
+              {(data.genres || [])
+                .filter((g) => !genres.includes(g.id))
+                .map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
             </select>
             <select aria-label="Sort books" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="shelf">Shelf order</option>
+              <option value="shelf">
+                {category === 'books' ? 'Shelf order' : 'Display order'}
+              </option>
+              {category === 'books' && <option value="bookOrder">Book numbering order</option>}
               <option value="title">Title A–Z</option>
-              <option value="author">Author A–Z</option>
+              {category === 'books' && <option value="author">Author A–Z</option>}
               <option value="year">Newest edition</option>
             </select>
-            <button
-              className="xp-button"
-              aria-pressed={indexOpen}
-              onClick={() => setIndexOpen(!indexOpen)}
-            >
-              Index
-            </button>
+            {category === 'books' && (
+              <button
+                className="xp-button"
+                aria-pressed={indexOpen}
+                onClick={() => setIndexOpen(!indexOpen)}
+              >
+                Index
+              </button>
+            )}
           </div>
+          {!!genres.length && (
+            <div className="collection-genre-filters" aria-label="Active genre filters">
+              <span>Matching any selected genre:</span>
+              {genres.map((id) => (
+                <button key={id} onClick={() => setGenres(genres.filter((value) => value !== id))}>
+                  {data.genres?.find((g) => g.id === id)?.name || id} ×
+                </button>
+              ))}
+              <button onClick={() => setGenres([])}>Clear genres</button>
+            </div>
+          )}
           {error && (
             <div className="library-error" role="alert">
               {error}
@@ -376,7 +462,7 @@ export default function Shelf({
             </div>
           )}
           <div className={`library-room ${current ? 'inspecting' : ''}`}>
-            <div className="library-scene-area">
+            <div className="library-scene-area" ref={sceneArea}>
               {visible && (
                 <Suspense
                   fallback={<div className="library-loading">Preparing the reading room…</div>}
@@ -390,6 +476,8 @@ export default function Shelf({
                     repository={repository}
                     reduced={reduced}
                     zoom={zoom}
+                    caseOpen={caseOpen}
+                    onToggleCase={() => setCaseOpen((v) => !v)}
                     autoRotate={autoRotate}
                     resetKey={resetKey}
                     onHover={setHover}
@@ -402,14 +490,14 @@ export default function Shelf({
                 <div className="library-empty">
                   <span className="library-kicker">ROOM FOR WHAT COMES NEXT</span>
                   <h2>
-                    {search || genre
+                    {search || genres.length
                       ? 'Nothing on this shelf.'
                       : category === 'certificates'
                         ? 'A place for your achievements.'
                         : 'Every collection starts with a story.'}
                   </h2>
                   <p>
-                    {search || genre
+                    {search || genres.length
                       ? 'Try another title, author, or genre.'
                       : repository.configured
                         ? 'No published objects in this category yet. Explore All Collections or sign in to add one.'
@@ -418,6 +506,13 @@ export default function Shelf({
                 </div>
               )}
               <div className="library-scene-top">
+                <button
+                  aria-label="Previous shelf"
+                  disabled={!data.shelves.length || data.shelves[0]?.id === shelf}
+                  onClick={() => browseShelf(-1)}
+                >
+                  ‹
+                </button>
                 <select
                   aria-label="Choose shelf"
                   value={shelf}
@@ -430,6 +525,13 @@ export default function Shelf({
                     </option>
                   ))}
                 </select>
+                <button
+                  aria-label="Next shelf"
+                  disabled={!data.shelves.length || data.shelves.at(-1)?.id === shelf}
+                  onClick={() => browseShelf(1)}
+                >
+                  ›
+                </button>
                 <span>
                   {loading
                     ? 'Opening library…'
@@ -534,8 +636,35 @@ export default function Shelf({
                     {artworkError}
                   </p>
                 )}
+                {objectType(current).geometry === 'case' && (
+                  <button className="library-read-button" onClick={() => setCaseOpen((v) => !v)}>
+                    {caseOpen ? 'Close case' : 'Open case'}
+                  </button>
+                )}
+                {current.front && (
+                  <button className="xp-button" onClick={() => setArtwork(current)}>
+                    View flat artwork
+                  </button>
+                )}
+                {current.artwork?.manual && (
+                  <button
+                    className="library-read-button"
+                    onClick={() => {
+                      setReadingRole('manual');
+                      setReading(current);
+                    }}
+                  >
+                    Read manual
+                  </button>
+                )}
                 {current.canRead ? (
-                  <button className="library-read-button" onClick={() => setReading(current)}>
+                  <button
+                    className="library-read-button"
+                    onClick={() => {
+                      setReadingRole(undefined);
+                      setReading(current);
+                    }}
+                  >
                     <BookOpen size={16} />
                     Read {current.digital?.mime === 'application/pdf' ? 'PDF' : 'EPUB'} edition →
                   </button>
@@ -546,7 +675,10 @@ export default function Shelf({
             )}
           </div>
           {(indexOpen || books.length > 0) && (
-            <div className={`library-index ${indexOpen ? 'expanded' : ''}`} aria-label="Book index">
+            <div
+              className={`library-index ${indexOpen ? 'expanded' : ''}`}
+              aria-label={category === 'books' ? 'Book index' : 'Collection objects'}
+            >
               {pageBooks.map((book) => (
                 <button
                   key={book.id}
@@ -563,6 +695,7 @@ export default function Shelf({
                     <i style={{ background: book.color }} />
                   )}
                   <span>
+                    {category === 'books' && book.bookNumber ? `${book.bookNumber} · ` : ''}
                     {book.title}
                     <small>{book.author}</small>
                   </span>
@@ -597,25 +730,6 @@ export default function Shelf({
           )}
           <footer className="library-footer">
             <span>Collected with care. Every object has a story.</span>
-            <div className="collection-audio">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={settings.sound}
-                  onChange={(e) => setSettings({ sound: e.target.checked })}
-                />
-                Sound
-              </label>
-              <input
-                aria-label="Collection sound volume"
-                type="range"
-                min="0"
-                max="1"
-                step=".05"
-                value={settings.volume}
-                onChange={(e) => setSettings({ volume: Number(e.target.value) })}
-              />
-            </div>
             <button onClick={ownerAccess}>
               <LockKeyhole size={11} />
               {owner ? 'Librarian’s desk' : 'Owner access'}
@@ -623,9 +737,13 @@ export default function Shelf({
           </footer>
         </>
       )}
+      {artwork && (
+        <ArtworkViewer item={artwork} repository={repository} onClose={() => setArtwork(null)} />
+      )}
       {reading && (
         <Reader
           book={reading}
+          role={readingRole}
           repository={repository}
           active={active}
           onClose={() => setReading(null)}

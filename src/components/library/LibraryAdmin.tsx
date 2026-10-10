@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { LibraryBook, LibraryData, LibraryRepository } from '../../lib/library/types';
-import { objectTypes, objectType } from '../../lib/library/registry';
+import { objectTypes } from '../../lib/library/registry';
+import CollectionOrganizer from './CollectionOrganizer';
+import { presetPresentation } from '../../lib/library/presets';
 import CollectionEditor, { defaultPresentation } from './CollectionEditor';
 export const newBook = (shelfId: string, typeId = 'book'): LibraryBook => {
   const type = objectTypes.find((t) => t.id === typeId)!;
@@ -29,7 +31,10 @@ export const newBook = (shelfId: string, typeId = 'book'): LibraryBook => {
     canRead: false,
     objectType: typeId,
     details: {},
-    presentation: { ...defaultPresentation },
+    presentation: {
+      ...defaultPresentation,
+      ...(type.casePreset ? presetPresentation(type.casePreset) : {}),
+    },
   };
 };
 export default function LibraryAdmin({
@@ -65,23 +70,6 @@ export default function LibraryAdmin({
     } finally {
       setBusy(false);
     }
-  }
-  async function move(kind: 'books' | 'shelves', id: string, direction: number) {
-    const ids = data[kind].map((i) => i.id),
-      from = ids.indexOf(id);
-    let to = from + direction;
-    if (kind === 'books') {
-      const shelf = data.books.find((b) => b.id === id)?.shelfId;
-      while (
-        to >= 0 &&
-        to < ids.length &&
-        data.books.find((b) => b.id === ids[to])?.shelfId !== shelf
-      )
-        to += direction;
-    }
-    if (to < 0 || to >= ids.length) return;
-    [ids[to], ids[from]] = [ids[from], ids[to]];
-    await work(() => repository.reorder(kind, ids));
   }
   return (
     <section className="library-admin" aria-label="Owner library management">
@@ -179,98 +167,13 @@ export default function LibraryAdmin({
             </label>
             <button disabled={busy}>{editing ? 'Rename shelf' : 'Add shelf'}</button>
           </form>
-          <div className="library-admin-shelves">
-            {data.shelves.map((s, i) => (
-              <div key={s.id}>
-                <strong>{s.name}</strong>
-                <button
-                  aria-label={`Move shelf ${s.name} up`}
-                  disabled={busy || !i}
-                  onClick={() => void move('shelves', s.id, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  aria-label={`Move shelf ${s.name} down`}
-                  disabled={busy || i === data.shelves.length - 1}
-                  onClick={() => void move('shelves', s.id, 1)}
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => {
-                    setEditing(s.id);
-                    setName(s.name);
-                  }}
-                >
-                  Rename
-                </button>
-                <button
-                  disabled={busy || data.books.some((b) => b.shelfId === s.id)}
-                  onClick={() => {
-                    if (confirm(`Delete empty shelf “${s.name}”?`))
-                      void work(() => repository.removeShelf(s.id));
-                  }}
-                >
-                  Delete shelf
-                </button>
-              </div>
-            ))}
-          </div>
-          {!data.shelves.length && <p>Create your first shelf to begin adding objects.</p>}
-          <div className="library-admin-books">
-            {data.books.map((b, i) => (
-              <article key={b.id}>
-                <div>
-                  <small>
-                    {objectType(b).label} · {b.published ? 'Published' : 'Private draft'}
-                  </small>
-                  <h3>{b.title}</h3>
-                  <span>{data.shelves.find((s) => s.id === b.shelfId)?.name}</span>
-                </div>
-                <div>
-                  <button
-                    aria-label={`Move ${b.title} earlier`}
-                    disabled={busy || !data.books.slice(0, i).some((v) => v.shelfId === b.shelfId)}
-                    onClick={() => void move('books', b.id, -1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    aria-label={`Move ${b.title} later`}
-                    disabled={busy || !data.books.slice(i + 1).some((v) => v.shelfId === b.shelfId)}
-                    onClick={() => void move('books', b.id, 1)}
-                  >
-                    ↓
-                  </button>
-                  <button aria-label={`Edit ${b.title}`} onClick={() => setDraft(b)}>
-                    Edit
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void work(() => repository.save({ ...b, published: !b.published }))
-                    }
-                  >
-                    {b.published ? 'Unpublish' : 'Publish'}
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `Delete “${b.title}”? Original uploads remain private until cleaned up.`,
-                        )
-                      )
-                        void work(() => repository.remove(b.id));
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+          <CollectionOrganizer
+            data={data}
+            repository={repository}
+            busy={busy}
+            work={work}
+            onEdit={setDraft}
+          />
           {orphans && (
             <section className="library-orphans">
               <h3>Unused private uploads</h3>
