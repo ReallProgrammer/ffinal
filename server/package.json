@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env src/index.mjs",
     "dev": "node --watch --env-file-if-exists=.env src/index.mjs",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "owner-password": "node src/password.mjs",
     "storage:dev": "node --env-file-if-exists=.env src/dev-storage.mjs"
   },
@@ -19,6 +19,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.0",
     "file-type": "^21.0.0",
+    "gltf-validator": "^2.0.0-dev.3.10",
     "helmet": "^8.0.0",
     "multer": "^2.0.0",
     "pdf-lib": "^1.17.1",
