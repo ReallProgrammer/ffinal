@@ -7,11 +7,11 @@ import { z } from 'zod';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { verifyPassword } from './password.mjs';
-import { validateAsset, cropImage } from './assets.mjs';
+import { validateAsset, cropImage, detailedImage } from './assets.mjs';
+import { collectionRoutes, placeItem } from './collection-routes.mjs';
 import { itemSchema, cropSchema, types } from './collection-schema.mjs';
 const uuid = z.string().uuid();
 const bookSchema = itemSchema;
-const shelfSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const problem = (status, message) => Object.assign(new Error(message), { status });
 export function createApp({ db, s3, config }) {
@@ -97,21 +97,40 @@ export function createApp({ db, s3, config }) {
   });
   api.get('/session', owner, (_req, res) => res.json({ email: config.ownerEmail }));
   async function library(admin = false) {
-    const shelves = (await db.query('SELECT id,name,position FROM shelves ORDER BY position,id'))
-      .rows;
+    const shelves = (
+      await db.query('SELECT id,name,position,appearance FROM shelves ORDER BY position,id')
+    ).rows;
     const records = (
       await db.query(
         `SELECT * FROM books ${admin ? '' : 'WHERE published=true'} ORDER BY position,id`,
       )
     ).rows;
+    const links = (
+      await db.query('SELECT * FROM book_assets WHERE book_id=ANY($1::uuid[])', [
+        records.map((r) => r.id),
+      ])
+    ).rows;
+    const genres = (await db.query('SELECT id,name FROM genres ORDER BY lower(name),id')).rows;
+    const associations = (
+      await db.query('SELECT * FROM book_genres WHERE book_id=ANY($1::uuid[])', [
+        records.map((r) => r.id),
+      ])
+    ).rows;
     const assets = (
       await db.query('SELECT id,kind,mime,filename,details FROM assets WHERE id=ANY($1::uuid[])', [
-        records.flatMap((r) => [r.front, r.spine, r.back, r.digital, r.model]).filter(Boolean),
+        [
+          ...records.flatMap((r) => [r.front, r.spine, r.back, r.digital, r.model]),
+          ...links.map((l) => l.asset_id),
+        ].filter(Boolean),
       ])
     ).rows;
     const books = records.map((row) => {
       const asset = (kind) => {
-        const a = assets.find((a) => a.id === row[kind]);
+        const a = assets.find(
+          (a) =>
+            a.id ===
+            (row[kind] || links.find((l) => l.book_id === row.id && l.role === kind)?.asset_id),
+        );
         return a ? { id: a.id, mime: a.mime, filename: a.filename, ...a.details } : null;
       };
       const canRead = Boolean(row.digital && (admin || row.metadata.digitalAccess === 'public'));
@@ -124,6 +143,22 @@ export function createApp({ db, s3, config }) {
         updatedAt: row.updated_at,
         createdAt: row.created_at,
         category: types.find((t) => t.id === (row.metadata.objectType || 'book'))?.category,
+        artwork: Object.fromEntries(
+          links
+            .filter(
+              (l) =>
+                l.book_id === row.id &&
+                !l.role.startsWith('layer:') &&
+                (l.role !== 'manual' || admin || row.metadata.digitalAccess === 'public'),
+            )
+            .map((l) => [l.role, asset(l.role)]),
+        ),
+        layerAssets: Object.fromEntries(
+          links
+            .filter((l) => l.book_id === row.id && l.role.startsWith('layer:'))
+            .map((l) => [l.asset_id, asset(l.role)]),
+        ),
+        genreIds: associations.filter((g) => g.book_id === row.id).map((g) => g.genre_id),
         model: asset('model'),
         front: asset('front'),
         spine: asset('spine'),
@@ -132,7 +167,7 @@ export function createApp({ db, s3, config }) {
         canRead,
       };
     });
-    return { shelves, books };
+    return { shelves, books, genres };
   }
   api.get('/types', (_req, res) => res.json(types));
   api.get('/library', async (_req, res) => res.json(await library()));
@@ -143,17 +178,34 @@ export function createApp({ db, s3, config }) {
     rateLimit({ windowMs: 60 * 1000, limit: 30, legacyHeaders: false }),
     upload,
     async (req, res) => {
-      const kind = z.enum(['front', 'spine', 'back', 'digital', 'model']).parse(req.body.kind);
+      const kind = z
+        .enum([
+          'front',
+          'spine',
+          'back',
+          'digital',
+          'model',
+          'disc',
+          'interior',
+          'booklet',
+          'card',
+          'insert',
+          'wrap',
+          'decal',
+          'manual',
+        ])
+        .parse(req.body.kind);
       if (!req.file) throw problem(400, 'Choose a file to upload.');
       let validated;
       try {
-        validated = await validateAsset(req.file.buffer, kind);
+        validated = await validateAsset(req.file.buffer, kind, req.file.originalname);
       } catch (error) {
         throw problem(400, error.message);
       }
       const id = randomUUID(),
         originalKey = `originals/${id}`,
-        textureKey = validated.texture ? `textures/${id}.webp` : null;
+        textureKey = validated.texture ? `textures/${id}.webp` : null,
+        normalizedKey = validated.normalized ? `models/${id}` : null;
       const filename = req.file.originalname.replace(/[\x00-\x1f\/\\]/g, '_').slice(0, 180);
       try {
         await s3.send(
@@ -161,7 +213,7 @@ export function createApp({ db, s3, config }) {
             Bucket: config.bucket,
             Key: originalKey,
             Body: req.file.buffer,
-            ContentType: validated.mime,
+            ContentType: validated.details?.sourceMime || validated.mime,
           }),
         );
         if (textureKey)
@@ -173,8 +225,17 @@ export function createApp({ db, s3, config }) {
               ContentType: 'image/webp',
             }),
           );
+        if (normalizedKey)
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: config.bucket,
+              Key: normalizedKey,
+              Body: validated.normalized,
+              ContentType: validated.mime,
+            }),
+          );
         await db.query(
-          'INSERT INTO assets(id,kind,original_key,texture_key,mime,filename,bytes,details) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+          'INSERT INTO assets(id,kind,original_key,texture_key,mime,filename,bytes,details,normalized_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
           [
             id,
             kind,
@@ -184,11 +245,12 @@ export function createApp({ db, s3, config }) {
             filename,
             req.file.size,
             validated.details || {},
+            normalizedKey,
           ],
         );
       } catch (error) {
         await Promise.allSettled(
-          [originalKey, textureKey]
+          [originalKey, textureKey, normalizedKey]
             .filter(Boolean)
             .map((Key) => s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key }))),
         );
@@ -206,7 +268,7 @@ export function createApp({ db, s3, config }) {
       const source = (
         await db.query('SELECT * FROM assets WHERE id=$1', [uuid.parse(req.params.id)])
       ).rows[0];
-      if (!source || !['front', 'spine', 'back'].includes(source.kind))
+      if (!source || ['digital', 'model', 'manual'].includes(source.kind))
         throw problem(404, 'Artwork not found.');
       const original = await s3.send(
         new GetObjectCommand({ Bucket: config.bucket, Key: source.original_key }),
@@ -265,16 +327,52 @@ export function createApp({ db, s3, config }) {
     if (!item) throw problem(404, 'Item not found.');
     res.json(item);
   });
+  const detailJobs = new Map();
+  let detailQueue = Promise.resolve();
+  function detailTexture(asset) {
+    if (detailJobs.has(asset.id)) return detailJobs.get(asset.id);
+    const task = detailQueue.then(async () => {
+      const existing = (await db.query('SELECT detail_key FROM assets WHERE id=$1', [asset.id]))
+        .rows[0]?.detail_key;
+      if (existing) return existing;
+      const source = await s3.send(
+        new GetObjectCommand({ Bucket: config.bucket, Key: asset.original_key }),
+      );
+      const image = await detailedImage(
+          Buffer.from(await source.Body.transformToByteArray()),
+          asset.details,
+        ),
+        key = `details/${asset.id}.webp`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          Body: image,
+          ContentType: 'image/webp',
+        }),
+      );
+      await db.query('UPDATE assets SET detail_key=$2 WHERE id=$1', [asset.id, key]);
+      return key;
+    });
+    detailQueue = task.catch(() => {});
+    detailJobs.set(asset.id, task);
+    task.then(
+      () => detailJobs.delete(asset.id),
+      () => detailJobs.delete(asset.id),
+    );
+    return task;
+  }
   api.get('/assets/:id', async (req, res) => {
     const id = uuid.parse(req.params.id);
     const admin = await session(req);
     const asset = (await db.query('SELECT * FROM assets WHERE id=$1', [id])).rows[0];
-    if (!asset || asset.kind === 'digital') throw problem(404, 'Artwork not found.');
+    if (!asset || ['digital', 'manual'].includes(asset.kind))
+      throw problem(404, 'Artwork not found.');
     if (
       !admin &&
       !(
         await db.query(
-          'SELECT 1 FROM books WHERE published=true AND ($1=front OR $1=spine OR $1=back OR $1=model)',
+          "SELECT 1 FROM books WHERE published=true AND ($1=front OR $1=spine OR $1=back OR $1=model OR EXISTS (SELECT 1 FROM book_assets ba WHERE ba.book_id=books.id AND ba.asset_id=$1 AND ba.role NOT IN ('wrap','manual')))",
           [id],
         )
       ).rowCount
@@ -282,13 +380,27 @@ export function createApp({ db, s3, config }) {
       throw problem(404, 'Artwork not found.');
     const original = req.query.original === '1';
     if (original && !admin) throw problem(403, 'Original artwork is private.');
+    if (req.query.quality === 'detail' && !original && asset.kind !== 'model' && !asset.detail_key)
+      asset.detail_key = await detailTexture(asset);
     const data = await s3.send(
       new GetObjectCommand({
         Bucket: config.bucket,
-        Key: original || asset.kind === 'model' ? asset.original_key : asset.texture_key,
+        Key: original
+          ? asset.original_key
+          : asset.kind === 'model'
+            ? asset.normalized_key || asset.original_key
+            : req.query.quality === 'detail'
+              ? asset.detail_key
+              : asset.texture_key,
       }),
     );
-    res.type(original || asset.kind === 'model' ? asset.mime : 'image/webp');
+    res.type(
+      original
+        ? asset.details?.sourceMime || asset.mime
+        : asset.kind === 'model'
+          ? asset.mime
+          : 'image/webp',
+    );
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     res.set('Content-Length', String(data.ContentLength));
     data.Body.on('error', () => res.destroy());
@@ -297,8 +409,8 @@ export function createApp({ db, s3, config }) {
   api.get('/books/:id/read', async (req, res) => {
     const row = (
       await db.query(
-        'SELECT b.*,a.original_key,a.mime,a.filename FROM books b JOIN assets a ON b.digital=a.id WHERE b.id=$1',
-        [uuid.parse(req.params.id)],
+        "SELECT b.*,a.original_key,a.mime,a.filename FROM books b JOIN assets a ON a.id=CASE WHEN $2='manual' THEN (SELECT asset_id FROM book_assets WHERE book_id=b.id AND role='manual') ELSE b.digital END WHERE b.id=$1",
+        [uuid.parse(req.params.id), req.query.role === 'manual' ? 'manual' : 'digital'],
       )
     ).rows[0];
     if (
@@ -318,32 +430,7 @@ export function createApp({ db, s3, config }) {
     file.Body.on('error', () => res.destroy());
     file.Body.pipe(res);
   });
-  api.post('/admin/shelves', owner, async (req, res) => {
-    const { name } = shelfSchema.parse(req.body);
-    const id = randomUUID();
-    await db.query(
-      'INSERT INTO shelves(id,name,position) VALUES($1,$2,(SELECT count(*) FROM shelves))',
-      [id, name],
-    );
-    res.status(201).json({ id });
-  });
-  api.put('/admin/shelves/order', owner, async (req, res) => {
-    await reorder('shelves', req.body);
-    res.sendStatus(204);
-  });
-  api.put('/admin/shelves/:id', owner, async (req, res) => {
-    const { name } = shelfSchema.parse(req.body);
-    if (
-      !(await db.query('UPDATE shelves SET name=$1 WHERE id=$2', [name, uuid.parse(req.params.id)]))
-        .rowCount
-    )
-      throw problem(404, 'Shelf not found.');
-    res.sendStatus(204);
-  });
-  api.delete('/admin/shelves/:id', owner, async (req, res) => {
-    await db.query('DELETE FROM shelves WHERE id=$1', [uuid.parse(req.params.id)]);
-    res.sendStatus(204);
-  });
+  collectionRoutes({ api, db, s3, config, owner, problem, reorder });
   api.put('/admin/books/order', owner, async (req, res) => {
     await reorder('books', req.body);
     res.sendStatus(204);
@@ -375,20 +462,58 @@ export function createApp({ db, s3, config }) {
     }
   }
   async function saveBook(req, res, create) {
-    const input = bookSchema.parse(req.body);
+    // Existing deployed clients echo read-side asset descriptors. Normalize only
+    // these known fields; ownership and role validation still run below.
+    const payload = { ...req.body };
+    delete payload.layerAssets;
+    if (payload.artwork && typeof payload.artwork === 'object' && !Array.isArray(payload.artwork))
+      payload.artwork = Object.fromEntries(
+        Object.entries(payload.artwork).map(([role, value]) => [
+          role,
+          value && typeof value === 'object' ? value.id : value,
+        ]),
+      );
+    const input = bookSchema.parse(payload);
 
-    const { shelfId, published, front, spine, back, digital, model, ...metadata } = input;
+    const {
+      shelfId,
+      published,
+      front,
+      spine,
+      back,
+      digital,
+      model,
+      artwork,
+      layers,
+      genreIds,
+      placement,
+      ...metadata
+    } = input;
+    metadata.layers = layers;
     const client = await db.connect();
     let id = create ? randomUUID() : uuid.parse(req.params.id);
     try {
       await client.query('BEGIN');
-      for (const [kind, value] of Object.entries({ front, spine, back, digital, model }))
+      await client.query('LOCK TABLE books IN EXCLUSIVE MODE');
+      const references = { ...artwork };
+      for (const [surface, list] of Object.entries(layers))
+        for (const layer of list)
+          if (layer.type === 'image')
+            references['layer:' + surface + ':' + layer.id] = layer.assetId;
+      for (const [kind, value] of Object.entries({
+        front,
+        spine,
+        back,
+        digital,
+        model,
+        ...references,
+      }))
         if (
           value &&
           !(
             await client.query('SELECT 1 FROM assets WHERE id=$1 AND kind=$2 FOR KEY SHARE', [
               value,
-              kind,
+              kind.startsWith('layer:') ? 'decal' : kind,
             ])
           ).rowCount
         )
@@ -407,6 +532,30 @@ export function createApp({ db, s3, config }) {
         ).rowCount
       )
         throw problem(404, 'Book not found.');
+      await client.query('DELETE FROM book_assets WHERE book_id=$1', [id]);
+      for (const [role, value] of Object.entries(references))
+        if (value)
+          await client.query('INSERT INTO book_assets(book_id,role,asset_id) VALUES($1,$2,$3)', [
+            id,
+            role,
+            value,
+          ]);
+      if (genreIds !== undefined) {
+        if (new Set(genreIds).size !== genreIds.length)
+          throw problem(400, 'Choose each genre once.');
+        if (
+          (await client.query('SELECT id FROM genres WHERE id=ANY($1::uuid[])', [genreIds]))
+            .rowCount !== genreIds.length
+        )
+          throw problem(409, 'A selected genre no longer exists.');
+        await client.query('DELETE FROM book_genres WHERE book_id=$1', [id]);
+        for (const genre of genreIds)
+          await client.query('INSERT INTO book_genres(book_id,genre_id) VALUES($1,$2)', [
+            id,
+            genre,
+          ]);
+      }
+      if (placement) await placeItem(client, id, { shelfId, ...placement }, problem);
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -426,7 +575,7 @@ export function createApp({ db, s3, config }) {
     res.json(
       (
         await db.query(
-          'SELECT id,kind,filename,bytes,created_at FROM assets WHERE NOT EXISTS (SELECT 1 FROM books WHERE assets.id IN (front,spine,back,digital,model)) ORDER BY created_at DESC',
+          'SELECT id,kind,filename,bytes,created_at FROM assets WHERE NOT EXISTS (SELECT 1 FROM books WHERE assets.id IN (front,spine,back,digital,model)) AND NOT EXISTS (SELECT 1 FROM book_assets WHERE asset_id=assets.id) ORDER BY created_at DESC',
         )
       ).rows,
     ),
@@ -441,14 +590,15 @@ export function createApp({ db, s3, config }) {
       if (asset) {
         if (
           (
-            await client.query('SELECT 1 FROM books WHERE $1 IN (front,spine,back,digital,model)', [
-              id,
-            ])
+            await client.query(
+              'SELECT 1 FROM books WHERE $1 IN (front,spine,back,digital,model) UNION ALL SELECT 1 FROM book_assets WHERE asset_id=$1',
+              [id],
+            )
           ).rowCount
         )
           throw problem(409, 'This asset is still used by a book.');
         await Promise.all(
-          [asset.original_key, asset.texture_key]
+          [asset.original_key, asset.texture_key, asset.detail_key, asset.normalized_key]
             .filter(Boolean)
             .map((Key) => s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key }))),
         );
@@ -470,7 +620,7 @@ export function createApp({ db, s3, config }) {
         ? 400
         : err instanceof multer.MulterError
           ? 413
-          : err.code === '23503'
+          : ['23503', '23505'].includes(err.code)
             ? 409
             : err.status || 500;
     const message =
@@ -478,11 +628,13 @@ export function createApp({ db, s3, config }) {
         ? 'Check the submitted fields and try again.'
         : err instanceof multer.MulterError
           ? 'Upload exceeds the file limit.'
-          : err.code === '23503'
-            ? 'The shelf or asset is in use, or no longer exists.'
-            : status === 500
-              ? 'The library service could not complete this request.'
-              : err.message;
+          : err.code === '23505'
+            ? 'This name already exists.'
+            : err.code === '23503'
+              ? 'The shelf or asset is in use, or no longer exists.'
+              : status === 500
+                ? 'The library service could not complete this request.'
+                : err.message;
     if (status === 500) console.error('Library request failed:', err.code || err.name);
     res.status(status).json({ error: message });
   });

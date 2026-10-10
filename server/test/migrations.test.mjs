@@ -62,7 +62,7 @@ test(
         assert.equal(saved.metadata.title, metadata.title);
         assert.equal(saved.metadata.objectType, 'book');
         assert.equal(saved.metadata.presentation.textOverlay, false);
-        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 1);
+        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 2);
         const policies = await c2.query(
           "SELECT relrowsecurity FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace WHERE nspname=$1 AND relname IN ('assets','books','shelves','sessions')",
           [schema],

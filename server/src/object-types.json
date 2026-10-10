@@ -48,7 +48,9 @@
         "label": "Supporting notes",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "book",
@@ -69,7 +71,9 @@
         "label": "Publication date",
         "input": "date"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "vhs",
@@ -85,7 +89,9 @@
         "label": "Studio",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "vhs-tape",
@@ -101,7 +107,9 @@
         "label": "Studio",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "cassette",
@@ -122,7 +130,9 @@
         "label": "Record label",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "minidisc",
@@ -143,7 +153,9 @@
         "label": "Record label",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "bluray",
@@ -159,7 +171,9 @@
         "label": "Studio",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "bluray",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
   },
   {
     "id": "dvd",
@@ -175,7 +189,9 @@
         "label": "Studio",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "dvd",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
   },
   {
     "id": "ps5",
@@ -196,7 +212,9 @@
         "label": "Publisher",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "ps5",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
   },
   {
     "id": "xbox",
@@ -217,7 +235,9 @@
         "label": "Publisher",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "xboxone",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
   },
   {
     "id": "pc",
@@ -238,7 +258,9 @@
         "label": "Publisher",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "pc-box",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
   },
   {
     "id": "model",
@@ -259,7 +281,9 @@
         "label": "Medium",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
   },
   {
     "id": "vinyl",
@@ -280,6 +304,90 @@
         "label": "Record label",
         "input": "text"
       }
-    ]
+    ],
+    "casePreset": "",
+    "contents": []
+  },
+  {
+    "id": "cd",
+    "label": "CD jewel case",
+    "category": "media",
+    "geometry": "case",
+    "dimensions": [2.85, 2.5, 0.2],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ],
+    "casePreset": "cd-jewel",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
+  },
+  {
+    "id": "ps3",
+    "label": "PlayStation 3 game",
+    "category": "games",
+    "geometry": "case",
+    "dimensions": [2.15, 2.65, 0.22],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "developer",
+        "label": "Developer",
+        "input": "text"
+      },
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      }
+    ],
+    "casePreset": "ps3",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
+  },
+  {
+    "id": "ps4",
+    "label": "PlayStation 4 game",
+    "category": "games",
+    "geometry": "case",
+    "dimensions": [2.15, 2.65, 0.22],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "developer",
+        "label": "Developer",
+        "input": "text"
+      },
+      {
+        "key": "publisher",
+        "label": "Publisher",
+        "input": "text"
+      }
+    ],
+    "casePreset": "ps4",
+    "contents": ["disc", "interior", "booklet", "card", "insert", "manual"]
+  },
+  {
+    "id": "cassette-case",
+    "label": "Audio cassette case",
+    "category": "media",
+    "geometry": "case",
+    "dimensions": [2.6, 1.65, 0.34],
+    "surfaces": ["front", "spine", "back"],
+    "document": false,
+    "fields": [
+      {
+        "key": "studio",
+        "label": "Studio",
+        "input": "text"
+      }
+    ],
+    "casePreset": "cassette-clear",
+    "contents": ["interior", "booklet", "card", "insert", "manual"]
   }
 ]

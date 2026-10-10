@@ -1,0 +1,210 @@
+{
+  "cases": [
+    {
+      "id": "cd-jewel",
+      "label": "Standard CD jewel case",
+      "shape": "jewel",
+      "dimensions": [2.85, 2.5, 0.2],
+      "color": "#d2dfdf",
+      "opacity": 0.24,
+      "band": 0.035,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "cd-slim",
+      "label": "Slim CD jewel case",
+      "shape": "jewel",
+      "dimensions": [2.85, 2.5, 0.1],
+      "color": "#c9d2d3",
+      "opacity": 0.2,
+      "band": 0.025,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "pc-jewel",
+      "label": "PC jewel case",
+      "shape": "jewel",
+      "dimensions": [2.85, 2.5, 0.2],
+      "color": "#d7e0de",
+      "opacity": 0.24,
+      "band": 0.035,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "dvd",
+      "label": "Standard DVD case",
+      "shape": "keep",
+      "dimensions": [2.15, 3.15, 0.24],
+      "color": "#25272b",
+      "opacity": 0.98,
+      "band": 0.035,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "bluray",
+      "label": "Blu-ray case",
+      "shape": "keep",
+      "dimensions": [2.15, 2.65, 0.2],
+      "color": "#15549b",
+      "opacity": 0.87,
+      "band": 0.15,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "ps3",
+      "label": "PlayStation 3 clear case",
+      "shape": "keep",
+      "dimensions": [2.15, 2.65, 0.22],
+      "color": "#dce1df",
+      "opacity": 0.4,
+      "band": 0.14,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "ps4",
+      "label": "PlayStation 4 blue case",
+      "shape": "keep",
+      "dimensions": [2.15, 2.65, 0.22],
+      "color": "#1755a7",
+      "opacity": 0.88,
+      "band": 0.14,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "ps5",
+      "label": "PlayStation 5 case",
+      "shape": "keep",
+      "dimensions": [2.15, 2.65, 0.22],
+      "color": "#1655a8",
+      "opacity": 0.88,
+      "band": 0.14,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "xbox360",
+      "label": "Xbox 360 green case",
+      "shape": "keep",
+      "dimensions": [2.15, 3.15, 0.24],
+      "color": "#57a832",
+      "opacity": 0.9,
+      "band": 0.08,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "xboxone",
+      "label": "Xbox One / Series case",
+      "shape": "keep",
+      "dimensions": [2.15, 2.65, 0.22],
+      "color": "#236d32",
+      "opacity": 0.9,
+      "band": 0.14,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "pc-box",
+      "label": "PC game keep case",
+      "shape": "keep",
+      "dimensions": [2.15, 3.15, 0.28],
+      "color": "#292a30",
+      "opacity": 0.98,
+      "band": 0.04,
+      "roughness": 0.18,
+      "hinge": "left"
+    },
+    {
+      "id": "cassette-clear",
+      "label": "Clear cassette case",
+      "shape": "cassette",
+      "dimensions": [2.6, 1.65, 0.34],
+      "color": "#d5dfdb",
+      "opacity": 0.25,
+      "band": 0.035,
+      "roughness": 0.18,
+      "hinge": "bottom"
+    }
+  ],
+  "frames": [
+    {
+      "id": "black",
+      "label": "Minimal black",
+      "color": "#252525",
+      "backing": "#ece8dd",
+      "metalness": 0,
+      "glass": false,
+      "width": 0.055
+    },
+    {
+      "id": "white",
+      "label": "White",
+      "color": "#f1f1eb",
+      "backing": "#f2eee3",
+      "metalness": 0,
+      "glass": false,
+      "width": 0.07
+    },
+    {
+      "id": "silver",
+      "label": "Brushed silver",
+      "color": "#adb4b8",
+      "backing": "#edeae2",
+      "metalness": 0.85,
+      "glass": false,
+      "width": 0.065
+    },
+    {
+      "id": "gold",
+      "label": "Gold",
+      "color": "#b49a51",
+      "backing": "#f3eedb",
+      "metalness": 0.7,
+      "glass": false,
+      "width": 0.085
+    },
+    {
+      "id": "wood",
+      "label": "Natural wood",
+      "color": "#865f3b",
+      "backing": "#f1e7d6",
+      "metalness": 0,
+      "glass": false,
+      "width": 0.09
+    },
+    {
+      "id": "glass",
+      "label": "Frameless glass",
+      "color": "#d4e1df",
+      "backing": "#f4f5ef",
+      "metalness": 0,
+      "glass": true,
+      "width": 0.012
+    },
+    {
+      "id": "floating",
+      "label": "Modern floating frame",
+      "color": "#333a39",
+      "backing": "#c7c7bd",
+      "metalness": 0.15,
+      "glass": true,
+      "width": 0.06
+    },
+    {
+      "id": "academic",
+      "label": "Academic award frame",
+      "color": "#513725",
+      "backing": "#f4edda",
+      "metalness": 0.2,
+      "glass": true,
+      "width": 0.12
+    }
+  ]
+}

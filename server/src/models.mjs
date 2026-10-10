@@ -1,5 +1,6 @@
 import validator from 'gltf-validator';
 import sharp from 'sharp';
+import { fileTypeFromBuffer } from 'file-type';
 export async function validateModel(buffer) {
   if (buffer.length > 25 * 1024 * 1024) throw new Error('Models must be 25 MB or smaller.');
   let json,
@@ -37,7 +38,14 @@ export async function validateModel(buffer) {
     );
   if (
     (json.extensionsUsed || []).some(
-      (e) => !['KHR_materials_unlit', 'KHR_texture_transform'].includes(e),
+      (e) =>
+        ![
+          'KHR_materials_unlit',
+          'KHR_texture_transform',
+          'KHR_materials_specular',
+          'KHR_materials_volume',
+          'KHR_materials_ior',
+        ].includes(e),
     )
   )
     throw new Error('Unsupported model extension. Export a standard uncompressed static glTF.');
@@ -65,6 +73,8 @@ export async function validateModel(buffer) {
           )
         : null;
     if (!data) throw new Error('Missing model texture.');
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes((await fileTypeFromBuffer(data))?.mime))
+      throw new Error('Unsupported model texture.');
     const m = await sharp(data, { limitInputPixels: 16_777_216 }).metadata();
     if (
       !['jpeg', 'png', 'webp'].includes(m.format) ||

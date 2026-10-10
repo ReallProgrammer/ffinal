@@ -1,4 +1,5 @@
 FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends python3 libassimp5 util-linux && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --chown=node:node package.json package-lock.json ./
 RUN --mount=type=secret,id=build_ca \

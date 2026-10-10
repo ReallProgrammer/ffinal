@@ -1,12 +1,12 @@
-import { validateModel } from './models.mjs';
+import { importModel } from './model-import.mjs';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { fileTypeFromBuffer } from 'file-type';
 import yauzl from 'yauzl';
-export async function validateAsset(buffer, kind) {
-  if (kind === 'model') return validateModel(buffer);
+export async function validateAsset(buffer, kind, filename) {
+  if (kind === 'model') return importModel(buffer, filename);
   const detected = await fileTypeFromBuffer(buffer);
-  if (kind !== 'digital') {
+  if (!['digital', 'manual'].includes(kind)) {
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(detected?.mime))
       throw new Error('Covers must be genuine PNG, JPEG, or WebP images.');
     if (buffer.length > 10 * 1024 * 1024) throw new Error('Cover images must be 10 MB or smaller.');
@@ -17,7 +17,7 @@ export async function validateAsset(buffer, kind) {
     const texture = await image
       .rotate()
       .resize({ width: 1536, height: 1536, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 85 })
+      .webp({ quality: 94, effort: 4 })
       .toBuffer();
     return {
       mime: detected.mime,
@@ -106,7 +106,7 @@ export async function validateAsset(buffer, kind) {
   throw new Error('Digital books must be genuine PDF or EPUB files.');
 }
 
-export async function cropImage(buffer, crop) {
+export async function cropImage(buffer, crop, size = 1536) {
   const oriented = await sharp(buffer, { limitInputPixels: 40_000_000 }).rotate().toBuffer();
   const meta = await sharp(oriented).metadata();
   const w = meta.width,
@@ -117,12 +117,12 @@ export async function cropImage(buffer, crop) {
   ch = Math.max(1, Math.floor(ch));
   const left = Math.round((w - cw) * crop.x),
     top = Math.round((h - ch) * crop.y);
-  const width = Math.max(16, Math.round(Math.min(1536, 1536 * crop.ratio))),
+  const width = Math.max(16, Math.round(Math.min(size, size * crop.ratio))),
     height = Math.max(16, Math.round(width / crop.ratio));
   const texture = await sharp(oriented)
     .extract({ left, top, width: cw, height: ch })
     .resize(width, height, { fit: 'fill' })
-    .webp({ quality: 88 })
+    .webp({ quality: 96, effort: 4 })
     .toBuffer();
   return {
     texture,
@@ -135,4 +135,12 @@ export async function cropImage(buffer, crop) {
       lowResolution: cw < width || ch < height,
     },
   };
+}
+export async function detailedImage(buffer, details = {}) {
+  if (details.crop) return (await cropImage(buffer, details.crop, 4096)).texture;
+  return sharp(buffer, { limitInputPixels: 40_000_000 })
+    .rotate()
+    .resize({ width: 4096, height: 4096, fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 96, effort: 4 })
+    .toBuffer();
 }
