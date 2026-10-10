@@ -203,6 +203,14 @@ test('desktop windows drag and resize', async ({ page }, info) => {
   test.skip(info.project.name === 'mobile', 'Mobile uses full-size touch-friendly windows.');
   await desktop(page);
   const explorer = page.locator('[data-app="explorer"]');
+  await page.locator('.desktop').evaluate(async (element) => {
+    await Promise.all(
+      element
+        .getAnimations({ subtree: true })
+        .filter((animation) => Number.isFinite(Number(animation.effect?.getTiming().iterations)))
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
   const before = (await explorer.boundingBox())!;
   await page.mouse.move(before.x + 180, before.y + 15);
   await page.mouse.down();

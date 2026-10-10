@@ -1,15 +1,38 @@
-export type AssetKind = 'front' | 'spine' | 'back' | 'digital';
+export type AssetKind = 'front' | 'spine' | 'back' | 'digital' | 'model';
 export interface BookAsset {
   id: string;
   mime: string;
   filename: string;
+  width?: number;
+  height?: number;
+  crop?: Crop;
+  lowResolution?: boolean;
 }
 export interface LibraryShelf {
   id: string;
   name: string;
   position: number;
 }
+export interface Crop {
+  x: number;
+  y: number;
+  zoom: number;
+  ratio: number;
+}
+export interface Presentation {
+  frame: boolean;
+  roughness: number;
+  textOverlay: boolean;
+  scale: number;
+  rotation: [number, number, number];
+}
 export interface LibraryBook {
+  objectType?: string;
+  category?: string;
+  createdAt?: string;
+  details?: Record<string, string>;
+  presentation?: Presentation;
+  model?: BookAsset | null;
   id: string;
   title: string;
   author: string;
@@ -38,8 +61,9 @@ export interface LibraryData {
 }
 export interface BookInput extends Omit<
   LibraryBook,
-  'id' | 'position' | 'updatedAt' | 'canRead' | AssetKind
+  'id' | 'position' | 'updatedAt' | 'createdAt' | 'category' | 'canRead' | AssetKind
 > {
+  model: string | null;
   front: string | null;
   spine: string | null;
   back: string | null;
@@ -53,6 +77,8 @@ export interface LibraryRepository {
   logout(): Promise<void>;
   upload(file: File, kind: AssetKind, progress: (percent: number) => void): Promise<BookAsset>;
   texture(id: string, signal?: AbortSignal): Promise<Blob>;
+  original(id: string): Promise<Blob>;
+  crop(id: string, crop: Crop): Promise<BookAsset>;
   read(book: LibraryBook): Promise<Blob>;
   save(book: LibraryBook): Promise<string>;
   remove(id: string): Promise<void>;

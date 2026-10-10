@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+const PdfReader = lazy(() => import('./PdfReader'));
 import { unzip } from 'fflate';
 import type { LibraryBook, LibraryRepository } from '../../lib/library/types';
 interface Chapter {
@@ -64,11 +65,31 @@ export default function Reader({
   book,
   repository,
   onClose,
+  active = true,
 }: {
   book: LibraryBook;
   repository: LibraryRepository;
   onClose: () => void;
+  active?: boolean;
 }) {
+  const [coverUrl, setCoverUrl] = useState('');
+  useEffect(() => {
+    let active = true,
+      url = '';
+    if (book.front)
+      void repository
+        .texture(book.front.id)
+        .then((blob) => {
+          url = URL.createObjectURL(blob);
+          if (active) setCoverUrl(url);
+          else URL.revokeObjectURL(url);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [book.front?.id, repository]);
   const [url, setUrl] = useState(''),
     [chapters, setChapters] = useState<Chapter[]>([]),
     [chapter, setChapter] = useState(0),
@@ -113,9 +134,9 @@ export default function Reader({
       {error && <p role="alert">{error}</p>}
       {!url && !error && <div className="library-loading">Opening your book…</div>}
       {url && book.digital?.mime === 'application/pdf' && (
-        <object type="application/pdf" data={url} aria-label={book.title}>
-          <p>This browser does not have an embedded PDF reader. Use Download edition below.</p>
-        </object>
+        <Suspense fallback={<p>Preparing document reader…</p>}>
+          <PdfReader url={url} title={book.title} coverUrl={coverUrl} active={active} />
+        </Suspense>
       )}
       {chapters.length > 0 && (
         <>
