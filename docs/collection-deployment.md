@@ -32,7 +32,7 @@ GLB/glTF must embed all buffers and images. No external URI, scripts, compressed
 
 ## Release from the review branch
 
-The upgrade is prepared on `codex/collection-room`. In Render, set this service’s deployment branch to `codex/collection-room` and deploy it with the existing `server` root directory and environment settings. Once `/api/v1/types` returns the 13-format registry and the existing collection still loads, merge the collection pull request into main to publish GitHub Pages, then return Render’s branch to main. This keeps the existing frontend working while the compatible backend upgrade deploys. No new credentials or environment variables are required.
+The compatible backend was published first on main in commit `b30cd77`. Keep Render on main with the existing `server` root directory and environment settings; if automatic deployment is disabled, use Manual Deploy → Deploy latest commit. Once `/api/v1/types` returns the 13-format registry and the existing collection still loads, merge the collection pull request to publish the frontend. No new credentials or environment variables are required.
 
 ## Reproduce verification locally
 
@@ -51,4 +51,4 @@ npm run build
 
 The prebuild/predev script copies PDF.js fonts, character maps and WebAssembly support from the locked dependency into generated public assets; no external PDF service is used. The reader keeps nearby pages rather than rasterizing a whole document upfront. Model textures are fitted to a 4-million-pixel rendering budget (2 million on small screens), with a 1024 px edge limit. Textures and geometry are ref-counted and evicted after unused retention; closing/minimizing releases scene instances. Browser storage holds OS preferences only, never the collection source of truth.
 
-Production verification requires the owner to log in, publish one real item, refresh, inspect it while signed out, and test its document. Local checks never upload fixture records to the production API. The cloud environment's network must allow the Render hostname to perform live read-only checks; current access is blocked.
+Production verification requires the owner to log in, publish one real item, refresh, inspect it while signed out, and test its document. Local checks never upload fixture records to the production API. The cloud environment must allow the Render hostname for live read-only verification. Access has been restored and the existing health endpoint was verified before rollout.

@@ -2,7 +2,7 @@
 
 ## Audit (October 9, 2026)
 
-The existing React 19/Vite/Three.js application already has a window manager, local archive, real owner editor, and independent Express API. PostgreSQL retains books, shelves, assets and hashed sessions. S3 retains originals and optimized WebP images. Authentication uses a single configured owner and server-side session checks. Render/Supabase and GitHub Pages have been configured by the owner. This workspace cannot currently reach the Render hostname; the last successful production health check was supplied by the owner. No production credentials are needed in chat or source control.
+The existing React 19/Vite/Three.js application already has a window manager, local archive, real owner editor, and independent Express API. PostgreSQL retains books, shelves, assets and hashed sessions. S3 retains originals and optimized WebP images. Authentication uses a single configured owner and server-side session checks. Render/Supabase and GitHub Pages have been configured by the owner. Render access was initially blocked by the cloud network policy. Access has since been restored, and a live health check returned status ok before the upgrade rollout. No production credentials are needed in chat or source control.
 
 The implementation needs multiple object types, crop variants, GLB/embedded GLTF validation, texture readiness/caching, isolated presentation and a page-rendered PDF reader. Reuse the backend, authentication, storage, OS window and legacy archive. Do not replace unrelated applications.
 
