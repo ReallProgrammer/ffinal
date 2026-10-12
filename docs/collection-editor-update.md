@@ -33,4 +33,4 @@ No new credentials, providers or environment variables are needed. Deploy the ba
 
 Backend: 32 tests pass against local PostgreSQL and S3 storage, including migration/reconnection, auth, category uniqueness, stale-genre rejection, bulk cleanup and three distinct wrap surface colors.
 
-Browser: desktop focused viewer and editor checks pass, including angular zoom preservation, animated loading, auto-rotate, immediate genre cleanup, automatic wrap splitting, layer dragging and gallery navigation. Mobile checks and final deployment verification are recorded in the task report.
+Browser: all six relevant desktop scenarios pass. The six mobile scenarios pass across the initial run and a clean rerun of the full-format/certificate checks after a development hot-reload interrupted the first run. Coverage includes every registered physical format, PDF reading, angular zoom preservation, animated loading, auto-rotate, immediate genre cleanup, automatic wrap splitting, layer dragging and gallery navigation. Production build and TypeScript checks pass. Final read-only deployment verification is recorded in the task report.

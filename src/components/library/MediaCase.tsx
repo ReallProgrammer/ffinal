@@ -104,7 +104,7 @@ export default function MediaCase({
     opacity = p?.plasticOpacity ?? preset.opacity,
     roughness = p?.plasticRoughness ?? preset.roughness;
   const game = ['pc', 'ps5', 'xbox'].includes(item.objectType || '');
-  const plastic = { color, opacity: game ? 1 : opacity, roughness, plastic: true },
+  const plastic = { color, opacity, roughness, plastic: true },
     wall = Math.min(0.024, d * 0.15),
     cover = useRef<THREE.Group>(null);
   const bottom = preset.hinge === 'bottom',
