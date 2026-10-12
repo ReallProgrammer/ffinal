@@ -79,8 +79,7 @@ export default function GenreEditor({
           onChange={(e) => {
             setCategory(e.target.value);
             setSelected([]);
-            setEditing('');
-            setName('');
+            if (!editing) setName('');
           }}
         >
           {categories.map((c) => (

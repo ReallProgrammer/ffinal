@@ -72,7 +72,7 @@ export default function BookModel({
       rotation={[0, rotation, 0]}
       onClick={(e) => {
         e.stopPropagation();
-        if (resource.value) onSelect?.();
+        if (resource.value && e.delta < 5) onSelect?.();
       }}
       onPointerOver={(e) => {
         e.stopPropagation();

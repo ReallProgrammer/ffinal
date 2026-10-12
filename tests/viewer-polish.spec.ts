@@ -124,6 +124,14 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
         'true',
         { timeout: 30000 },
       );
+      await page
+        .locator('.library-index')
+        .getByRole('button', { name: new RegExp(item.title) })
+        .click();
+      await expect(page.locator('.library-book-details')).toHaveAttribute(
+        'data-artwork-ready',
+        'true',
+      );
       if (item.title.includes('certificate')) {
         await expect(page.locator('.library-book-details')).not.toContainText('Unknown');
         await expect(page.locator('.library-book-details')).not.toContainText(
@@ -188,7 +196,16 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
           steps: 10,
         });
         await page.mouse.up();
-        await page.waitForTimeout(700);
+        await expect
+          .poll(
+            async () => {
+              const previous = Number(await viewer.getAttribute('data-view-azimuth'));
+              await page.waitForTimeout(300);
+              return Math.abs(Number(await viewer.getAttribute('data-view-azimuth')) - previous);
+            },
+            { timeout: 10000 },
+          )
+          .toBeLessThan(0.002);
         const angle = Number(await viewer.getAttribute('data-view-azimuth'));
         const distance = Number(await viewer.getAttribute('data-view-orbit-distance'));
         await page.getByRole('button', { name: 'Zoom in on library' }).click();
@@ -305,8 +322,16 @@ test('owner removes unused uploads and managed genres immediately or in batches 
       .getByRole('button', { name: 'Rename', exact: true })
       .click();
     await page.getByLabel('Genre name', { exact: true }).fill('Renamed ' + suffix);
+    await page.getByLabel('Genre category', { exact: true }).selectOption('games');
+    await expect(page.getByLabel('Genre name', { exact: true })).toHaveValue('Renamed ' + suffix);
     await page.getByRole('button', { name: 'Save genre name', exact: true }).click();
     await expect(page.locator('.genre-options')).toContainText('Renamed ' + suffix);
+    const recategorized = await (
+      await context.request.get(base + '/admin/collection', { headers })
+    ).json();
+    expect(recategorized.genres.find((g: any) => g.name === 'Renamed ' + suffix).category).toBe(
+      'games',
+    );
     await page
       .locator('.genre-option')
       .filter({ hasText: 'Renamed ' + suffix })

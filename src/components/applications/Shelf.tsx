@@ -197,6 +197,7 @@ export default function Shelf({
         .catch((e) => setError(e.message));
   }, [initialView]);
   const inspect = (id: string) => {
+    if (id === selected) return;
     cue('open');
     setCaseOpen(false);
     setSelected(id);
