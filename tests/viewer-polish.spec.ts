@@ -24,6 +24,7 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
   const items: { id: string; title: string }[] = [],
     assets: string[] = [];
   let shelf = '',
+    sibling = '',
     release = () => {};
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -35,6 +36,12 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
     });
     expect(created.status()).toBe(201);
     shelf = (await created.json()).id;
+    const adjacent = await context.request.post(base + '/admin/shelves', {
+      headers,
+      data: { name: 'Adjacent empty shelf ' + suffix },
+    });
+    expect(adjacent.status()).toBe(201);
+    sibling = (await adjacent.json()).id;
     const upload = async (kind: string, name: string, mimeType: string) => {
       const r = await context.request.post(base + '/admin/uploads', {
         headers,
@@ -94,6 +101,11 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
       'Books',
       '3D Objects',
     ]);
+    await page.getByLabel('Next shelf', { exact: true }).click();
+    await expect(page.getByLabel('Choose shelf')).toHaveValue(sibling);
+    await expect(categories.getByRole('button')).toHaveText(['All Collections']);
+    await page.getByLabel('Previous shelf', { exact: true }).click();
+    await expect(page.getByLabel('Choose shelf')).toHaveValue(shelf);
     const chooser = (await page.getByLabel('Choose shelf').boundingBox())!;
     const sceneBox = (await page.locator('.library-canvas').boundingBox())!;
     expect(chooser.x - sceneBox.x).toBeLessThan(90);
@@ -208,6 +220,7 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
     for (const item of items)
       await context.request.delete(base + '/admin/items/' + item.id, { headers });
     if (shelf) await context.request.delete(base + '/admin/shelves/' + shelf, { headers });
+    if (sibling) await context.request.delete(base + '/admin/shelves/' + sibling, { headers });
     for (const id of assets)
       await context.request.delete(base + '/admin/assets/' + id, { headers });
     await context.request.delete(base + '/session', { headers });

@@ -2154,3 +2154,20 @@
     justify-content: flex-start;
   }
 }
+
+.library-scene-top {
+  z-index: 3;
+}
+.library-scene-top button {
+  pointer-events: auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #a5af9b;
+  background: #f8f4e5ed;
+  color: #385548;
+  font-size: 22px;
+  line-height: 1;
+}
+.library-scene-top button:disabled {
+  opacity: 0.45;
+}
