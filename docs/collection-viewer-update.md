@@ -27,6 +27,8 @@ GLB/glTF no longer have fixed node, mesh, material, image, vertex or triangle co
 
 Measured from the cloud workspace before this change: the first live collection request took **24.4 seconds**, followed by a warm request taking **2.2 seconds**. These include proxy and network time, so they are not database-only timings. The current free Render service can sleep; it runs in Ohio, while the Supabase project is in Sydney.
 
+After the backend update, consecutive requests measured **2.69, 1.53 and 1.45 seconds**. The later warm samples are lower than the earlier 2.2-second warm sample; network and proxy variability still apply. Cold-start delays remain a hosting constraint.
+
 The list API now batches its independent reads into two dependent stages instead of six sequential database waits, and indexes asset/link lookups by ID. Required artwork surfaces load together, thumbnails reuse the same bounded source cache, and ordinary updates preserve the active scene and cached assets. Explicit refresh still clears failed resources. Initial metadata requests start without waiting for the Three.js import, and older overlapping responses cannot overwrite a newer list.
 
 Recommended order:
