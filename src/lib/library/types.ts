@@ -19,6 +19,7 @@ export interface CoverLayer {
 export interface Genre {
   id: string;
   name: string;
+  category?: string;
 }
 export interface ShelfAppearance {
   width: number;
@@ -153,7 +154,7 @@ export interface LibraryRepository {
   removeShelf(id: string, moveTo?: string): Promise<void>;
   reorder(kind: 'books' | 'shelves', ids: string[]): Promise<void>;
   place(id: string, shelfId: string, placement: Placement, expectedShelfId?: string): Promise<void>;
-  saveGenre(name: string, id?: string): Promise<Genre>;
+  saveGenre(name: string, id?: string, category?: string): Promise<Genre>;
   removeGenre(id: string): Promise<void>;
   removeGenres(selection: { ids: string[] } | { all: true }): Promise<{ deleted: string[] }>;
   split(

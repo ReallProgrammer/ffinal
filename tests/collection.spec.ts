@@ -90,6 +90,7 @@ test('all physical formats load actual surfaces, focus alone, return, and render
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
     await page.locator('.run-app input').press('Enter');
+    await page.getByLabel('Choose shelf').selectOption(shelf);
     await page.getByRole('button', { name: 'Certificates/Achievements', exact: true }).click();
     await expect(page.locator('.library-index')).toContainText('Certificate or award ' + suffix);
     await page

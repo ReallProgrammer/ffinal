@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-test('owner saves wrap art, layers, interior files and exact placement; visitors inspect a hinged case', async ({
+test('owner saves wrap art, layers, interior files and exact placement; visitors browse a multi-surface artwork gallery', async ({
   page,
   context,
 }, info) => {
@@ -47,20 +47,25 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       .locator('.collection-type-grid')
       .getByRole('button', { name: /^PlayStation 5 game/ })
       .click();
+    await expect(page.locator('[placeholder="Unknown"]')).toHaveCount(0);
+    await expect(page.getByLabel('Genre category', { exact: true })).toHaveValue('games');
+    await page.getByLabel('Genre name', { exact: true }).fill('Disposable ' + name);
+    await page.getByRole('button', { name: 'Add genre', exact: true }).click();
+    const genreRow = page.locator('.genre-option').filter({ hasText: 'Disposable ' + name });
+    await expect(genreRow.getByRole('checkbox')).toHaveCount(1);
+    await genreRow.getByRole('checkbox').check();
+    await genreRow.getByRole('button', { name: /^Delete genre/ }).click();
+    await expect(genreRow).toHaveCount(0);
     await page.getByLabel('Title', { exact: true }).fill(name);
     await page.getByLabel('Shelf', { exact: true }).selectOption(shelf);
+    await page.getByRole('tab', { name: /Full wrap/ }).click();
     await page
       .getByLabel('Upload full wrap', { exact: true })
       .setInputFiles('/tmp/library-fixtures/cover.png');
-    await expect(
-      page.getByRole('button', { name: 'Confirm split & apply surfaces' }),
-    ).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm split & apply surfaces' }).click();
-    await expect(
-      page
-        .locator('.library-upload')
-        .filter({ has: page.getByLabel('Upload front', { exact: true }) }),
-    ).toContainText('front —');
+    await expect(page.getByRole('tab', { name: /front Added/ })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('tab', { name: /spine Added/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /back Added/ })).toBeVisible();
+    await page.getByRole('tab', { name: /^disc/ }).click();
     await page
       .getByLabel('Upload disc', { exact: true })
       .setInputFiles('/tmp/library-fixtures/revised.png');
@@ -69,6 +74,7 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
         .locator('.library-upload')
         .filter({ has: page.getByLabel('Upload disc', { exact: true }) }),
     ).toContainText('Ready');
+    await page.getByRole('tab', { name: /^manual/ }).click();
     await page
       .getByLabel('Upload manual', { exact: true })
       .setInputFiles('/tmp/library-fixtures/four-pages.pdf');
@@ -80,7 +86,22 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page.getByLabel('Reading access').selectOption('public');
     await page.getByRole('button', { name: 'Add text', exact: true }).click();
     await page.getByLabel('Layer text', { exact: true }).fill('COLLECTOR');
-    await page.getByLabel('rotation', { exact: true }).fill('12');
+    await expect(page.locator('.layer-properties input[type=number]')).toHaveCount(0);
+    const rotationHandle = page.getByRole('button', { name: 'Rotate layer', exact: true });
+    await rotationHandle.scrollIntoViewIfNeeded();
+    const handleBox = (await rotationHandle.boundingBox())!;
+    const layerBox = (await page.locator('.cover-layer').first().boundingBox())!;
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(layerBox.x + layerBox.width + 35, layerBox.y + layerBox.height / 2, {
+      steps: 15,
+    });
+    await page.mouse.up();
+    await expect(page.locator('.cover-layer').first()).not.toHaveCSS(
+      'transform',
+      'matrix(1, 0, 0, 1, 0, 0)',
+    );
+
     await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
     await page.getByRole('button', { name: 'Delete layer', exact: true }).click();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -150,6 +171,7 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       ).books.find((b: any) => b.id === id).shelfId,
     ).toBe(shelf2);
     await page.getByRole('button', { name: 'Public collection', exact: true }).click();
+    await page.getByLabel('Choose shelf').selectOption(shelf2);
     await page
       .getByRole('navigation', { name: 'Collection categories' })
       .getByRole('button', { name: 'Games', exact: true })
@@ -166,14 +188,14 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       'true',
       { timeout: 30000 },
     );
-    await page.getByRole('button', { name: 'Open case', exact: true }).click();
-    await page.waitForTimeout(900);
-    await page.screenshot({
-      path: `/workspace/artifacts/refinement-${info.project.name}-open-case.png`,
-    });
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('button', { name: 'Open case', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open case', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'View flat artwork', exact: true }).click();
+    await expect(page.getByLabel('Artwork gallery').getByRole('button')).toHaveCount(4);
+    await page.getByLabel('Next artwork', { exact: true }).click();
+    await expect(page.locator('.artwork-gallery-footer')).toContainText('Spine');
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.artwork-gallery-footer')).toContainText('Back');
+    await expect(page.locator('.artwork-viewer img[draggable=false]')).toBeVisible();
     const zoom = page.locator('.artwork-viewer .zoom-surface');
     const box = (await zoom.boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.4);

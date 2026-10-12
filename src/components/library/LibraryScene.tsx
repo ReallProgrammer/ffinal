@@ -5,7 +5,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as Orbit } from 'three-stdlib';
 import BookModel from './BookModel';
-import { objectType, footprint } from '../../lib/library/registry';
+import { footprint } from '../../lib/library/registry';
 import type { LibraryBook, LibraryRepository, LibraryShelf } from '../../lib/library/types';
 import { objectViewBounds } from '../../lib/library/view';
 class SceneBoundary extends Component<
@@ -62,7 +62,7 @@ function Rig({
   reduced: boolean;
   orbitRef: React.RefObject<Orbit | null>;
 }) {
-  const { camera, invalidate, size } = useThree();
+  const { camera, invalidate, size, gl } = useThree();
   const animate = useRef(true);
   const elapsed = useRef(0);
   const destination = useMemo(
@@ -79,24 +79,48 @@ function Rig({
       ),
     [selected, target, size.width, size.height, extent, item, open],
   );
+  const lastZoom = useRef(zoom);
   useEffect(() => {
+    lastZoom.current = zoom;
     animate.current = true;
     elapsed.current = 0;
     invalidate();
-  }, [destination, zoom, invalidate]);
+  }, [destination, invalidate]);
+  useEffect(() => {
+    const controls = orbitRef.current;
+    if (controls && lastZoom.current !== zoom) {
+      animate.current = false;
+      const offset = camera.position.clone().sub(controls.target);
+      const distance = THREE.MathUtils.clamp(
+        (offset.length() * zoom) / lastZoom.current,
+        controls.minDistance,
+        controls.maxDistance,
+      );
+      camera.position.copy(controls.target).add(offset.setLength(distance));
+      controls.update();
+      invalidate();
+    }
+    lastZoom.current = zoom;
+  }, [zoom, camera, orbitRef, invalidate]);
   useEffect(() => {
     const controls = orbitRef.current;
     const stop = () => {
       animate.current = false;
     };
     controls?.addEventListener('start', stop);
-    return () => controls?.removeEventListener('start', stop);
-  }, [orbitRef]);
+    gl.domElement.addEventListener('wheel', stop, { passive: true });
+    gl.domElement.addEventListener('pointerdown', stop);
+    return () => {
+      controls?.removeEventListener('start', stop);
+      gl.domElement.removeEventListener('wheel', stop);
+      gl.domElement.removeEventListener('pointerdown', stop);
+    };
+  }, [orbitRef, gl]);
   useFrame((_, delta) => {
     if (!animate.current || !orbitRef.current) return;
     elapsed.current += delta;
     const speed = reduced ? 1 : 1 - Math.exp(-delta * 5);
-    camera.position.lerp(destination.clone().sub(target).multiplyScalar(zoom).add(target), speed);
+    camera.position.lerp(destination, speed);
     orbitRef.current.target.lerp(target, speed);
     orbitRef.current.update();
     invalidate();
@@ -133,7 +157,9 @@ function ViewingControls({
   const offset = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
     const controls = orbitRef.current;
-    if (!controls || !bounds) return;
+    if (!controls) return;
+    if (autoRotate && item && !reduced) invalidate();
+    if (!bounds) return;
     // Cursor zoom and right-drag may move the orbit target. Keep both the target
     // and camera around this object's enclosure, including when viewing its back.
     offset.copy(controls.target).sub(center);
@@ -164,6 +190,7 @@ function ViewingControls({
       node.dataset.viewTargetX = controls.target.x.toFixed(3);
       node.dataset.viewTargetOffset = controls.target.distanceTo(center).toFixed(3);
       node.dataset.viewRadius = bounds.radius.toFixed(3);
+      node.dataset.viewAzimuth = controls.getAzimuthalAngle().toFixed(3);
     }
   });
   return (
@@ -473,7 +500,7 @@ export function BookPreview({
   repository: LibraryRepository;
   reduced: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const open = false;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const orbit = useRef<Orbit>(null);
@@ -490,7 +517,6 @@ export function BookPreview({
             repository={repository}
             inspection
             caseOpen={open}
-            onToggleCase={() => setOpen((v) => !v)}
             reduced={reduced}
             onReady={setReady}
             onError={setError}
@@ -512,17 +538,7 @@ export function BookPreview({
             orbitRef={orbit}
           />
         </Canvas>
-        {objectType(book).geometry === 'case' && (
-          <button type="button" onClick={() => setOpen((v) => !v)}>
-            {open ? 'Close case' : 'Open case'}
-          </button>
-        )}
-        <small>
-          {error ||
-            (ready
-              ? 'Drag to rotate · right-drag to pan · scroll to zoom'
-              : 'Preparing cover textures…')}
-        </small>
+        {!ready && <small>{error || 'Preparing cover textures…'}</small>}
       </div>
     </SceneBoundary>
   );

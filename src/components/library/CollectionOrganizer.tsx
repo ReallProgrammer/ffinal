@@ -26,7 +26,9 @@ import type {
   LibraryShelf,
   ShelfAppearance,
 } from '../../lib/library/types';
-import { objectType, footprint } from '../../lib/library/registry';
+import CollectionFormatIcon from './CollectionFormatIcon';
+import CollectionThumbnail from './CollectionThumbnail';
+import { objectType } from '../../lib/library/registry';
 function Sortable({
   id,
   kind,
@@ -186,14 +188,21 @@ export default function CollectionOrganizer({
                   .filter((b) => b.shelfId === s.id)
                   .map((b) => (
                     <Sortable key={b.id} id={b.id} kind="object" label={b.title} disabled={busy}>
-                      <i
-                        className={`organizer-object-shape type-${objectType(b).geometry}`}
-                        style={{
-                          background: b.color,
-                          width: Math.max(12, footprint(b).width * 16),
-                          height: Math.max(25, b.height * 18),
-                        }}
-                      />
+                      <span
+                        className={`organizer-illustration type-${objectType(b).geometry}`}
+                        style={{ color: b.color }}
+                      >
+                        {b.front ? (
+                          <CollectionThumbnail
+                            id={b.front.id}
+                            repository={repository}
+                            color={b.color}
+                            fallback={<CollectionFormatIcon typeId={b.objectType} />}
+                          />
+                        ) : (
+                          <CollectionFormatIcon typeId={b.objectType} />
+                        )}
+                      </span>
                       <div>
                         <small>
                           {objectType(b).label} · {b.published ? 'Published' : 'Private draft'}

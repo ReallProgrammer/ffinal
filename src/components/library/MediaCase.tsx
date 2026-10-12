@@ -103,7 +103,8 @@ export default function MediaCase({
   const color = p?.caseColor || preset.color,
     opacity = p?.plasticOpacity ?? preset.opacity,
     roughness = p?.plasticRoughness ?? preset.roughness;
-  const plastic = { color, opacity, roughness, plastic: true },
+  const game = ['pc', 'ps5', 'xbox'].includes(item.objectType || '');
+  const plastic = { color, opacity: game ? 1 : opacity, roughness, plastic: true },
     wall = Math.min(0.024, d * 0.15),
     cover = useRef<THREE.Group>(null);
   const bottom = preset.hinge === 'bottom',
@@ -150,8 +151,12 @@ export default function MediaCase({
       />
       {[-1, 1].map((side) => (
         <group key={side}>
-          <Panel size={[wall, h, d]} position={[(side * w) / 2, 0, 0]} {...plastic} />
-          <Panel size={[w, wall, d]} position={[0, (side * h) / 2, 0]} {...plastic} />
+          <Panel
+            size={[wall, h - wall * 2, d]}
+            position={[(side * (w - wall)) / 2, 0, 0]}
+            {...plastic}
+          />
+          <Panel size={[w, wall, d]} position={[0, (side * (h - wall)) / 2, 0]} {...plastic} />
         </group>
       ))}
       <mesh position={[-w / 2 - wall / 2, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
@@ -205,25 +210,46 @@ export default function MediaCase({
       </group>
       {[-1, 1].map((n) => (
         <group key={n}>
-          <mesh
-            position={bottom ? [n * w * 0.35, -h / 2, 0] : [-w / 2, n * h * 0.36, 0]}
-            rotation={bottom ? [0, 0, Math.PI / 2] : [0, 0, 0]}
-          >
-            <cylinderGeometry args={[d * 0.24, d * 0.24, Math.min(0.18, h * 0.1), 16]} />
-            <meshPhysicalMaterial color={color} roughness={roughness} clearcoat={0.6} />
-          </mesh>
-          <Panel
-            size={[0.05, 0.1, d * 0.45]}
-            position={[w / 2 - wall, n * h * 0.26, d * 0.2]}
-            {...plastic}
-          />
-          <Panel
-            size={[0.07, 0.025, wall]}
-            position={[w / 2 - 0.025, n * h * 0.26, d * 0.42]}
-            {...plastic}
-          />
+          {!game && (
+            <mesh
+              position={bottom ? [n * w * 0.35, -h / 2, 0] : [-w / 2, n * h * 0.36, 0]}
+              rotation={bottom ? [0, 0, Math.PI / 2] : [0, 0, 0]}
+            >
+              <cylinderGeometry args={[d * 0.24, d * 0.24, Math.min(0.18, h * 0.1), 16]} />
+              <meshPhysicalMaterial color={color} roughness={roughness} clearcoat={0.6} />
+            </mesh>
+          )}
+          {!game && (
+            <Panel
+              size={[0.05, 0.1, d * 0.45]}
+              position={[w / 2 - wall, n * h * 0.26, d * 0.2]}
+              {...plastic}
+            />
+          )}
+          {!game && (
+            <Panel
+              size={[0.07, 0.025, wall]}
+              position={[w / 2 - 0.025, n * h * 0.26, d * 0.42]}
+              {...plastic}
+            />
+          )}
         </group>
       ))}
+      {game && (
+        <group>
+          <Panel
+            size={[0.004, h - 0.09, 0.008]}
+            position={[w / 2 + 0.001, 0, d * 0.1]}
+            color="#202724"
+          />
+          <Panel
+            size={[0.004, h * 0.105, d * 0.22]}
+            position={[w / 2 + 0.002, 0, d * 0.1]}
+            color={color}
+            roughness={0.8}
+          />
+        </group>
+      )}
       <group ref={cover} position={bottom ? [0, -h / 2, d / 2] : [-w / 2, 0, d / 2]}>
         <group position={bottom ? [0, h / 2, 0] : [w / 2, 0, 0]}>
           <Panel size={[w, h, wall]} {...plastic} />

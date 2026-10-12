@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetKind, BookAsset, LibraryBook, LibraryRepository } from '../../lib/library/types';
 import { artworkAsset } from '../../lib/library/types';
+import { ImagePlus, FileUp } from 'lucide-react';
+import CollectionThumbnail from './CollectionThumbnail';
 import { surfaceRatio, surfaceSize } from '../../lib/library/registry';
 export default function UploadField({
   item,
@@ -17,7 +19,7 @@ export default function UploadField({
   kind: AssetKind;
   label?: string;
   repository: LibraryRepository;
-  onChange: (asset: BookAsset | null) => void;
+  onChange: (asset: BookAsset | null) => void | Promise<void>;
   onCrop: () => void;
   onBusy: (busy: boolean) => void;
 }) {
@@ -73,7 +75,7 @@ export default function UploadField({
       }
       if (operation.signal.aborted) throw new Error('Upload cancelled.');
       if (mounted.current) {
-        onChange(uploaded);
+        await onChange(uploaded);
         setStatus('Ready');
         retry.current = null;
       }
@@ -117,22 +119,32 @@ export default function UploadField({
               ? 'GLB / GLTF / OBJ / STL / FBX / PLY · ZIP for companion textures · 25 MB'
               : 'PDF / EPUB · 50 MB'}
       </small>
-      <input
-        type="file"
-        aria-label={`Upload ${label || kind}`}
-        disabled={disabled || Boolean(controller.current)}
-        accept={
-          image
-            ? 'image/png,image/jpeg,image/webp'
-            : kind === 'model'
-              ? '.glb,.gltf,.obj,.stl,.fbx,.ply,.zip'
-              : '.pdf,.epub'
-        }
-        onChange={(e) => {
-          if (e.target.files?.[0]) void upload(e.target.files[0]);
-          e.target.value = '';
-        }}
-      />
+      <label className="library-upload-visual">
+        {asset && image ? (
+          <CollectionThumbnail id={asset.id} repository={repository} color={item.color} />
+        ) : image ? (
+          <ImagePlus size={32} />
+        ) : (
+          <FileUp size={32} />
+        )}
+        <span>{asset ? 'Replace file' : 'Choose a file or drop it here'}</span>
+        <input
+          type="file"
+          aria-label={`Upload ${label || kind}`}
+          disabled={disabled || Boolean(controller.current)}
+          accept={
+            image
+              ? 'image/png,image/jpeg,image/webp'
+              : kind === 'model'
+                ? '.glb,.gltf,.obj,.stl,.fbx,.ply,.zip'
+                : '.pdf,.epub'
+          }
+          onChange={(e) => {
+            if (e.target.files?.[0]) void upload(e.target.files[0]);
+            e.target.value = '';
+          }}
+        />
+      </label>
       <small>{filename || asset?.filename || 'No file uploaded'}</small>
       {status && (
         <div role="status">

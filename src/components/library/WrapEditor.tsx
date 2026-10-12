@@ -43,7 +43,8 @@ export default function WrapEditor({
       <h3>Full-wrap artwork</h3>
       <p>
         Upload the complete back → spine → front layout. The suggested split uses this object's
-        width and depth. Confirm the boundaries before applying.
+        width and depth and is applied automatically. Adjust the boundaries below if your layout
+        needs a different split.
       </p>
       <UploadField
         item={item}
@@ -53,7 +54,26 @@ export default function WrapEditor({
         repository={repository}
         onBusy={onBusy}
         onCrop={() => {}}
-        onChange={(asset) => onChange({ ...item, artwork: { ...item.artwork, wrap: asset } })}
+        onChange={async (asset) => {
+          const next = { ...item, artwork: { ...item.artwork, wrap: asset } };
+          onChange(next);
+          if (!asset) return;
+          onBusy(true);
+          setStatus('Generating front, spine and back…');
+          try {
+            const panels = await repository.split(asset.id, [
+              { role: 'back', start: 0, end: left },
+              { role: 'spine', start: left, end: right },
+              { role: 'front', start: right, end: 1 },
+            ]);
+            onChange({ ...next, ...panels });
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            onBusy(false);
+            setStatus('');
+          }
+        }}
       />
       {status && (
         <p role="status">

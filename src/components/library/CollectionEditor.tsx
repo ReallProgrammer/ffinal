@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type {
   AssetKind,
   LibraryBook,
@@ -10,6 +10,9 @@ import { objectType } from '../../lib/library/registry';
 import CropEditor from './CropEditor';
 import { withArtwork } from '../../lib/library/types';
 import UploadField from './UploadField';
+import CollectionThumbnail from './CollectionThumbnail';
+import { artworkAsset } from '../../lib/library/types';
+import { FileImage, FileText, Box, Disc3, PanelsTopLeft } from 'lucide-react';
 import SurfaceStudio from './SurfaceStudio';
 import WrapEditor from './WrapEditor';
 import GenreEditor from './GenreEditor';
@@ -42,10 +45,16 @@ export default function CollectionEditor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [uploading, setUploading] = useState(false),
+    [activeSurface, setActiveSurface] = useState<AssetKind>('front'),
     [crop, setCrop] = useState<AssetKind | null>(null),
     [background, setBackground] = useState('#e2dfd4'),
     [light, setLight] = useState(3),
     [tagsText, setTagsText] = useState((initial.tags || []).join(', '));
+  const [preview, setPreview] = useState(initial);
+  useEffect(() => {
+    const timer = setTimeout(() => setPreview(draft), 180);
+    return () => clearTimeout(timer);
+  }, [draft]);
   const type = objectType(draft);
   const presentation = { ...defaultPresentation, ...draft.presentation };
   const appearance = (value: Partial<Presentation>) =>
@@ -107,7 +116,7 @@ export default function CollectionEditor({
               Title
               <input
                 aria-label="Title"
-                placeholder="Unknown"
+                placeholder=""
                 required
                 maxLength={180}
                 value={draft.title}
@@ -118,7 +127,7 @@ export default function CollectionEditor({
               <label>
                 Author
                 <input
-                  placeholder="Unknown"
+                  placeholder=""
                   value={draft.author}
                   onChange={(e) => setDraft({ ...draft, author: e.target.value })}
                 />
@@ -129,7 +138,7 @@ export default function CollectionEditor({
                 {field.label}
                 <input
                   type={field.input}
-                  placeholder="Unknown"
+                  placeholder=""
                   maxLength={field.key === 'notes' ? 3000 : 500}
                   value={draft.details?.[field.key] || ''}
                   onChange={(e) =>
@@ -145,7 +154,7 @@ export default function CollectionEditor({
               Description
               <textarea
                 maxLength={6000}
-                placeholder="Unknown"
+                placeholder=""
                 value={draft.description}
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />
@@ -229,7 +238,48 @@ export default function CollectionEditor({
               Drop an image onto its surface. Originals stay private. Images fill the surface
               without stretching; adjust the crop to protect important content.
             </p>
-            {type.surfaces.includes('spine') && (
+            <div className="artwork-surface-picker" role="tablist" aria-label="Artwork surfaces">
+              {[...(type.surfaces.includes('spine') ? ['wrap' as AssetKind] : []), ...surfaces].map(
+                (kind) => {
+                  const asset = artworkAsset(draft, kind);
+                  const Icon =
+                    kind === 'wrap'
+                      ? PanelsTopLeft
+                      : kind === 'disc'
+                        ? Disc3
+                        : ['digital', 'manual'].includes(kind)
+                          ? FileText
+                          : kind === 'model'
+                            ? Box
+                            : FileImage;
+                  return (
+                    <button
+                      type="button"
+                      role="tab"
+                      disabled={uploading}
+                      aria-selected={activeSurface === kind}
+                      key={kind}
+                      onClick={() => setActiveSurface(kind)}
+                    >
+                      {asset?.mime.startsWith('image/') ? (
+                        <CollectionThumbnail
+                          id={asset.id}
+                          repository={repository}
+                          color={draft.color}
+                        />
+                      ) : (
+                        <Icon size={30} strokeWidth={1.4} />
+                      )}
+                      <span>
+                        {kind === 'digital' ? 'Document' : kind === 'wrap' ? 'Full wrap' : kind}
+                      </span>
+                      <small>{asset ? 'Added ✓' : 'Add'}</small>
+                    </button>
+                  );
+                },
+              )}
+            </div>
+            {activeSurface === 'wrap' && type.surfaces.includes('spine') && (
               <WrapEditor
                 blocked={uploading}
                 item={draft}
@@ -238,18 +288,20 @@ export default function CollectionEditor({
                 onBusy={setUploading}
               />
             )}
-            {surfaces.map((kind) => (
-              <UploadField
-                key={kind}
-                disabled={uploading}
-                item={draft}
-                kind={kind}
-                repository={repository}
-                onChange={(asset) => setDraft((d) => withArtwork(d, kind, asset))}
-                onCrop={() => setCrop(kind)}
-                onBusy={setUploading}
-              />
-            ))}
+            {surfaces
+              .filter((kind) => kind === activeSurface)
+              .map((kind) => (
+                <UploadField
+                  key={kind}
+                  disabled={uploading}
+                  item={draft}
+                  kind={kind}
+                  repository={repository}
+                  onChange={(asset) => setDraft((d) => withArtwork(d, kind, asset))}
+                  onCrop={() => setCrop(kind)}
+                  onBusy={setUploading}
+                />
+              ))}
             {(type.document || type.contents.includes('manual')) && (
               <label>
                 Document access
@@ -284,8 +336,9 @@ export default function CollectionEditor({
                     ? 'Book thickness'
                     : 'Object depth'
                   : key[0].toUpperCase() + key.slice(1)}
+                <output>{draft[key].toFixed(2)}</output>
                 <input
-                  type="number"
+                  type="range"
                   step=".01"
                   min={key === 'thickness' ? 0.04 : 0.4}
                   max={key === 'thickness' ? 3 : 4}
@@ -344,7 +397,7 @@ export default function CollectionEditor({
                   <label key={axis}>
                     {axis} orientation
                     <input
-                      type="number"
+                      type="range"
                       min={-180}
                       max={180}
                       value={presentation.rotation[n]}
@@ -403,7 +456,7 @@ export default function CollectionEditor({
         <aside>
           <Suspense fallback={<p>Preparing preview…</p>}>
             <BookPreview
-              book={draft}
+              book={preview}
               repository={repository}
               reduced={reduced}
               background={background}

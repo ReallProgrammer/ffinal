@@ -163,11 +163,12 @@ export const libraryApi: LibraryRepository = {
   async place(id, shelfId, placement, expectedShelfId) {
     await mutation(`/admin/items/${id}/place`, 'PUT', { shelfId, ...placement, expectedShelfId });
   },
-  async saveGenre(name, id) {
+  async saveGenre(name, id, category = 'all') {
     const r = await mutation(id ? `/admin/genres/${id}` : '/admin/genres', id ? 'PUT' : 'POST', {
       name,
+      category,
     });
-    return id ? { id, name } : r.json();
+    return id ? { id, name, category } : r.json();
   },
   async removeGenre(id) {
     await mutation(`/admin/genres/${id}`, 'DELETE');

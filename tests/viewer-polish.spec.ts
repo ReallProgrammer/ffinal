@@ -31,7 +31,7 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
   try {
     const created = await context.request.post(base + '/admin/shelves', {
       headers,
-      data: { name: 'Viewer fixtures ' + suffix },
+      data: { name: 'Professional viewer fixtures ' + suffix },
     });
     expect(created.status()).toBe(201);
     shelf = (await created.json()).id;
@@ -81,12 +81,19 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
       await gate;
       await route.continue();
     });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await openCollection(page);
     const categories = page.getByRole('navigation', { name: 'Collection categories' });
     await expect(categories.getByRole('button').first()).toHaveText('All Collections');
     await expect(categories.getByRole('button').nth(1)).toHaveText('Certificates/Achievements');
     await expect(categories.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
     await page.getByLabel('Choose shelf').selectOption(shelf);
+    await expect(categories.getByRole('button')).toHaveText([
+      'All Collections',
+      'Certificates/Achievements',
+      'Books',
+      '3D Objects',
+    ]);
     const chooser = (await page.getByLabel('Choose shelf').boundingBox())!;
     const sceneBox = (await page.locator('.library-canvas').boundingBox())!;
     expect(chooser.x - sceneBox.x).toBeLessThan(90);
@@ -105,9 +112,15 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
         'true',
         { timeout: 30000 },
       );
-      await expect(page.locator('.library-book-details')).toContainText('Unknown');
+      if (item.title.includes('certificate')) {
+        await expect(page.locator('.library-book-details')).not.toContainText('Unknown');
+        await expect(page.locator('.library-book-details')).not.toContainText(
+          'Issuing organization',
+        );
+      }
       const viewer = page.locator('.library-canvas [data-view-minimum]');
       await expect(viewer).toHaveCount(1);
+      await page.waitForTimeout(1800);
       const bounds = (await page.locator('.library-canvas canvas').boundingBox())!;
       await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
       for (let step = 0; step < 65; step++) await page.mouse.wheel(0, -400);
@@ -163,6 +176,23 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
           steps: 10,
         });
         await page.mouse.up();
+        await page.waitForTimeout(700);
+        const angle = Number(await viewer.getAttribute('data-view-azimuth'));
+        const distance = Number(await viewer.getAttribute('data-view-orbit-distance'));
+        await page.getByRole('button', { name: 'Zoom in on library' }).click();
+        await expect
+          .poll(async () => Number(await viewer.getAttribute('data-view-orbit-distance')))
+          .toBeLessThan(distance);
+        expect(
+          Math.abs(Number(await viewer.getAttribute('data-view-azimuth')) - angle),
+        ).toBeLessThan(0.025);
+        await page.getByLabel('Auto rotate', { exact: true }).check();
+        await expect
+          .poll(async () =>
+            Math.abs(Number(await viewer.getAttribute('data-view-azimuth')) - angle),
+          )
+          .toBeGreaterThan(0.06);
+        await page.getByLabel('Auto rotate', { exact: true }).uncheck();
         await page.screenshot({
           path: `/workspace/artifacts/viewer-${info.project.name}-certificate-side.png`,
         });
@@ -267,7 +297,7 @@ test('owner removes unused uploads and managed genres immediately or in batches 
     await page
       .locator('.genre-option')
       .filter({ hasText: 'Renamed ' + suffix })
-      .getByRole('button', { name: 'Delete genre', exact: true })
+      .getByRole('button', { name: /^Delete genre / })
       .click();
     await expect(page.locator('.genre-options')).not.toContainText('Renamed ' + suffix);
     await expect(page.locator('.genre-options')).not.toContainText('Immediate ' + suffix);

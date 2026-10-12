@@ -68,6 +68,7 @@ export default function Shelf({
     cue('close');
   };
   const loadSequence = useRef(0);
+  const initialShelf = useRef(false);
   const load = useCallback(
     async (refresh = false) => {
       const sequence = ++loadSequence.current;
@@ -81,6 +82,18 @@ export default function Shelf({
         const next = await repository.list(repository.isOwner());
         if (sequence !== loadSequence.current) return;
         setData(next);
+        if (!initialShelf.current && next.shelves.length) {
+          initialShelf.current = true;
+          const preferred =
+            next.shelves.find((s) => /professional/i.test(s.name)) ||
+            next.shelves.find((s) =>
+              next.books.some(
+                (b) => b.shelfId === s.id && b.published && b.objectType === 'certificate',
+              ),
+            ) ||
+            next.shelves[0];
+          setShelf(preferred.id);
+        }
         if (refresh) setSceneVersion((v) => v + 1);
       } catch (e) {
         if (sequence === loadSequence.current) setError((e as Error).message);
@@ -124,6 +137,16 @@ export default function Shelf({
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [active, selected, reading, mode, caseOpen, artwork]);
+  const availableCategories = categories.filter(
+    (c) =>
+      c.id === 'all' ||
+      data.books.some(
+        (b) => b.published && (!shelf || b.shelfId === shelf) && objectType(b).category === c.id,
+      ),
+  );
+  useEffect(() => {
+    if (!availableCategories.some((c) => c.id === category)) setCategory('all');
+  }, [shelf, data, category]);
   const books = data.books
     .filter(
       (b) =>
@@ -183,7 +206,7 @@ export default function Shelf({
   };
   const browseShelf = (direction: number) => {
     const index = data.shelves.findIndex((s) => s.id === shelf);
-    const next = data.shelves[Math.max(0, Math.min(data.shelves.length - 1, index + direction))];
+    const next = data.shelves[(index + direction + data.shelves.length) % data.shelves.length];
     if (next) {
       setSelected('');
       setCaseOpen(false);
@@ -399,7 +422,7 @@ export default function Shelf({
             <BookOpen size={37} />
           </header>
           <nav className="collection-categories" aria-label="Collection categories">
-            {categories.map((c) => (
+            {availableCategories.map((c) => (
               <button key={c.id} aria-pressed={category === c.id} onClick={() => setCategory(c.id)}>
                 {c.label}
               </button>
@@ -425,7 +448,14 @@ export default function Shelf({
             >
               <option value="">{genres.length ? 'Add another genre…' : 'Every genre'}</option>
               {(data.genres || [])
-                .filter((g) => !genres.includes(g.id))
+                .filter(
+                  (g) =>
+                    !genres.includes(g.id) &&
+                    (category === 'all' ||
+                      !g.category ||
+                      g.category === 'all' ||
+                      g.category === category),
+                )
                 .map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
@@ -484,7 +514,6 @@ export default function Shelf({
                     reduced={reduced}
                     zoom={zoom}
                     caseOpen={caseOpen}
-                    onToggleCase={() => setCaseOpen((v) => !v)}
                     autoRotate={autoRotate}
                     resetKey={resetKey}
                     onHover={setHover}
@@ -515,7 +544,7 @@ export default function Shelf({
               <div className="library-scene-top">
                 <button
                   aria-label="Previous shelf"
-                  disabled={!data.shelves.length || data.shelves[0]?.id === shelf}
+                  disabled={data.shelves.length < 2}
                   onClick={() => browseShelf(-1)}
                 >
                   ‹
@@ -534,7 +563,7 @@ export default function Shelf({
                 </select>
                 <button
                   aria-label="Next shelf"
-                  disabled={!data.shelves.length || data.shelves.at(-1)?.id === shelf}
+                  disabled={data.shelves.length < 2}
                   onClick={() => browseShelf(1)}
                 >
                   ›
@@ -546,16 +575,10 @@ export default function Shelf({
                 </span>
               </div>
               <div className="library-camera">
-                <button
-                  aria-label="Zoom in on library"
-                  onClick={() => setZoom((z) => Math.max(0.55, z - 0.15))}
-                >
+                <button aria-label="Zoom in on library" onClick={() => setZoom((z) => z * 0.85)}>
                   <ZoomIn size={17} />
                 </button>
-                <button
-                  aria-label="Zoom out of library"
-                  onClick={() => setZoom((z) => Math.min(1.65, z + 0.15))}
-                >
+                <button aria-label="Zoom out of library" onClick={() => setZoom((z) => z / 0.85)}>
                   <ZoomOut size={17} />
                 </button>
                 <button
@@ -578,11 +601,6 @@ export default function Shelf({
                   Auto rotate
                 </label>
               )}
-              <div className="library-scene-hint">
-                {current
-                  ? 'Drag to rotate · right-drag to pan · pinch or scroll to zoom'
-                  : 'Choose an object to explore its story.'}
-              </div>
             </div>
             {current && (
               <aside
@@ -595,33 +613,37 @@ export default function Shelf({
                   Return to shelf
                 </button>
                 <span className="library-kicker">{current.genre || 'FROM THE COLLECTION'}</span>
-                <h2>{current.title?.trim() || 'Unknown'}</h2>
+                <h2>{current.title?.trim() || 'Untitled object'}</h2>
                 <p className="library-author">
                   {objectType(current).label}
-                  {objectType(current).id === 'book'
-                    ? ` · ${current.author?.trim() || 'Unknown'}`
+                  {objectType(current).id === 'book' && current.author?.trim()
+                    ? ` · ${current.author}`
                     : ''}
                 </p>
-                <p className="library-description">{current.description?.trim() || 'Unknown'}</p>
+                {current.description?.trim() && (
+                  <p className="library-description">{current.description}</p>
+                )}
                 <dl>
-                  {objectType(current).fields.map((field) => (
-                    <div className="collection-detail-field" key={field.key}>
-                      <dt>{field.label}</dt>
-                      <dd>
-                        {field.input === 'url' && current.details?.[field.key] ? (
-                          <a href={current.details?.[field.key]} target="_blank" rel="noreferrer">
-                            Verify credential ↗
-                          </a>
-                        ) : (
-                          current.details?.[field.key]?.trim() || 'Unknown'
-                        )}
-                      </dd>
-                    </div>
-                  ))}
-                  {objectType(current).id !== 'certificate' && (
+                  {objectType(current)
+                    .fields.filter((field) => current.details?.[field.key]?.trim())
+                    .map((field) => (
+                      <div className="collection-detail-field" key={field.key}>
+                        <dt>{field.label}</dt>
+                        <dd>
+                          {field.input === 'url' && current.details?.[field.key] ? (
+                            <a href={current.details?.[field.key]} target="_blank" rel="noreferrer">
+                              Verify credential ↗
+                            </a>
+                          ) : (
+                            current.details?.[field.key]?.trim()
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  {objectType(current).id !== 'certificate' && current.year && (
                     <>
                       <dt>Published</dt>
-                      <dd>{current.year || 'Unknown'}</dd>
+                      <dd>{current.year}</dd>
                     </>
                   )}
                   {current.isbn && (
@@ -631,7 +653,7 @@ export default function Shelf({
                     </>
                   )}
                   <dt>Shelf</dt>
-                  <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name || 'Unknown'}</dd>
+                  <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name || ''}</dd>
                 </dl>
                 {!artworkReady && !artworkError && (
                   <p role="status">Preparing object and artwork…</p>
@@ -641,12 +663,12 @@ export default function Shelf({
                     {artworkError}
                   </p>
                 )}
-                {objectType(current).geometry === 'case' && (
-                  <button className="library-read-button" onClick={() => setCaseOpen((v) => !v)}>
-                    {caseOpen ? 'Close case' : 'Open case'}
-                  </button>
-                )}
-                {current.front && (
+
+                {(current.front ||
+                  current.back ||
+                  Object.values(current.artwork || {}).some((asset) =>
+                    asset?.mime.startsWith('image/'),
+                  )) && (
                   <button className="xp-button" onClick={() => setArtwork(current)}>
                     View flat artwork
                   </button>
@@ -673,7 +695,7 @@ export default function Shelf({
                     <BookOpen size={16} />
                     Read {current.digital?.mime === 'application/pdf' ? 'PDF' : 'EPUB'} edition →
                   </button>
-                ) : objectType(current).document ? (
+                ) : objectType(current).document && current.objectType !== 'certificate' ? (
                   <p className="library-unavailable">No public reading edition is available.</p>
                 ) : null}
               </aside>

@@ -5,9 +5,9 @@ export const objectTypes = registry;
 export const categories = [
   { id: 'all', label: 'All Collections' },
   { id: 'certificates', label: 'Certificates/Achievements' },
+  { id: 'books', label: 'Books' },
   { id: 'games', label: 'Games' },
   { id: 'media', label: 'Movies & Media' },
-  { id: 'books', label: 'Books' },
   { id: 'objects', label: '3D Objects' },
 ];
 export function objectType(item: Pick<LibraryBook, 'objectType'>) {

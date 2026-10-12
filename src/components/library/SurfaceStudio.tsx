@@ -64,6 +64,8 @@ export default function SurfaceStudio({
       y: number;
       layer: CoverLayer;
       before: LibraryBook['layers'];
+      lastAngle: number;
+      rotation: number;
       mode: 'move' | 'resize' | 'rotate';
     } | null>(null),
     area = useRef<HTMLDivElement>(null);
@@ -120,6 +122,15 @@ export default function SurfaceStudio({
       y: e.clientY,
       layer,
       before: item.layers,
+      lastAngle: Math.atan2(
+        e.clientY -
+          (area.current!.getBoundingClientRect().top +
+            layer.y * area.current!.getBoundingClientRect().height),
+        e.clientX -
+          (area.current!.getBoundingClientRect().left +
+            layer.x * area.current!.getBoundingClientRect().width),
+      ),
+      rotation: layer.rotation,
       mode,
     };
   }
@@ -127,27 +138,41 @@ export default function SurfaceStudio({
     const d = drag.current,
       r = area.current?.getBoundingClientRect();
     if (!d || !r || blocked) return;
-    const dx = (e.clientX - d.x) / r.width,
-      dy = (e.clientY - d.y) / r.height;
+    const angle = (d.layer.rotation * Math.PI) / 180;
+    const px = e.clientX - d.x,
+      py = e.clientY - d.y;
+    const dx = px / r.width,
+      dy = py / r.height;
+    const localX = (px * Math.cos(angle) + py * Math.sin(angle)) / r.width;
+    const localY = (-px * Math.sin(angle) + py * Math.cos(angle)) / r.height;
+    const cx = r.left + d.layer.x * r.width,
+      cy = r.top + d.layer.y * r.height;
+    const beforeAngle = d.lastAngle;
+    const nowAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+    const deltaAngle =
+      (Math.atan2(Math.sin(nowAngle - beforeAngle), Math.cos(nowAngle - beforeAngle)) * 180) /
+      Math.PI;
     const grid = (n: number) => Math.max(-1, Math.min(2, snap ? Math.round(n * 40) / 40 : n));
+    d.lastAngle = nowAngle;
+    d.rotation += deltaAngle;
+    const resizeFactor =
+      1 +
+      (2 * (localX * d.layer.width + localY * d.layer.height)) /
+        (d.layer.width ** 2 + d.layer.height ** 2);
+    const proportionalWidth = Math.max(0.02, Math.min(2, d.layer.width * resizeFactor));
     const next =
       d.mode === 'move'
         ? { x: grid(d.layer.x + dx), y: grid(d.layer.y + dy) }
         : d.mode === 'resize'
           ? {
-              width: Math.max(0.02, Math.min(2, d.layer.width + dx * 2)),
+              width: preserveAspect
+                ? proportionalWidth
+                : Math.max(0.02, Math.min(2, d.layer.width + localX * 2)),
               height: preserveAspect
-                ? Math.max(
-                    0.02,
-                    Math.min(
-                      2,
-                      (Math.max(0.02, Math.min(2, d.layer.width + dx * 2)) * d.layer.height) /
-                        d.layer.width,
-                    ),
-                  )
-                : Math.max(0.02, Math.min(2, d.layer.height + dy * 2)),
+                ? Math.max(0.02, Math.min(2, (proportionalWidth * d.layer.height) / d.layer.width))
+                : Math.max(0.02, Math.min(2, d.layer.height + localY * 2)),
             }
-          : { rotation: Math.max(-360, Math.min(360, d.layer.rotation + dx * 180)) };
+          : { rotation: ((((d.rotation + 180) % 360) + 360) % 360) - 180 };
     write(
       layers.map((v) => (v.id === d.layer.id ? { ...v, ...next } : v)),
       false,
@@ -172,7 +197,9 @@ export default function SurfaceStudio({
         repository={repository}
         onBusy={onBusy}
         onCrop={() => {}}
-        onChange={(asset) => asset && add(asset)}
+        onChange={(asset) => {
+          if (asset) add(asset);
+        }}
       />
       <fieldset disabled={blocked} className="studio-controls">
         <p>
@@ -372,20 +399,6 @@ export default function SurfaceStudio({
                 </label>
               </>
             )}
-            {(['x', 'y', 'width', 'height', 'rotation'] as const).map((key) => (
-              <label key={key}>
-                {key}
-                <input
-                  type="number"
-                  step={key === 'rotation' ? 1 : 0.01}
-                  min={key === 'rotation' ? -360 : key === 'width' || key === 'height' ? 0.01 : -1}
-                  max={key === 'rotation' ? 360 : 2}
-                  disabled={current.locked}
-                  value={current[key]}
-                  onChange={(e) => patch({ [key]: Number(e.target.value) })}
-                />
-              </label>
-            ))}
             <div>
               <button
                 type="button"
