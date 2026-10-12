@@ -1,3 +1,4 @@
+import { sourceBlob, clearAssetCache } from '../../lib/library/asset-cache';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { useEffect, useState } from 'react';
@@ -15,30 +16,6 @@ interface Entry {
   promise: Promise<Resources>;
   value?: Resources;
   error?: string;
-}
-const sourceCaches = new WeakMap<LibraryRepository, Map<string, Promise<Blob>>>();
-function sourceBlob(
-  repository: LibraryRepository,
-  id: string,
-  quality: 'overview' | 'detail' = 'overview',
-) {
-  let cache = sourceCaches.get(repository);
-  if (!cache) {
-    cache = new Map();
-    sourceCaches.set(repository, cache);
-  }
-  const key = id + ':' + quality;
-  let pending = cache.get(key);
-  if (!pending) {
-    pending = repository.texture(id, undefined, quality);
-    cache.set(key, pending);
-    pending.catch(() => cache!.delete(key));
-  } else {
-    cache.delete(key);
-    cache.set(key, pending);
-  }
-  while (cache.size > 24) cache.delete(cache.keys().next().value!);
-  return pending;
 }
 const caches = new WeakMap<LibraryRepository, Map<string, Entry>>();
 function dispose(r: Resources) {
@@ -122,7 +99,7 @@ function trim(cache: Map<string, Entry>) {
   }
 }
 export function clearCollectionCache(repository: LibraryRepository) {
-  sourceCaches.delete(repository);
+  clearAssetCache(repository);
   const cache = caches.get(repository);
   if (!cache) return;
   for (const [k, e] of cache) {
@@ -158,95 +135,102 @@ async function load(
 ): Promise<Resources> {
   const result: Resources = { maps: {} };
   try {
-    for (const face of (objectType(item).geometry === 'model'
-      ? []
-      : [
-          ...objectType(item).surfaces,
-          ...objectType(item).contents.filter((role) => role !== 'manual'),
-        ]) as Surface[]) {
-      if (
-        !artworkAsset(item, face) &&
-        !item.layers?.[face]?.length &&
-        !item.presentation?.textOverlay
-      )
-        continue;
-      const ratio = surfaceRatio(item, face);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(
-        16,
-        Math.round(
-          Math.min(
-            detail ? (innerWidth < 700 ? 2048 : 3072) : 1024,
-            (detail ? (innerWidth < 700 ? 2048 : 3072) : 1024) * ratio,
+    const faces = (
+      objectType(item).geometry === 'model'
+        ? []
+        : [
+            ...objectType(item).surfaces,
+            ...objectType(item).contents.filter((role) => role !== 'manual'),
+          ]
+    ) as Surface[];
+    const results = await Promise.allSettled(
+      faces.map(async (face) => {
+        if (
+          !artworkAsset(item, face) &&
+          !item.layers?.[face]?.length &&
+          !item.presentation?.textOverlay
+        )
+          return;
+        const ratio = surfaceRatio(item, face);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(
+          16,
+          Math.round(
+            Math.min(
+              detail ? (innerWidth < 700 ? 2048 : 3072) : 1024,
+              (detail ? (innerWidth < 700 ? 2048 : 3072) : 1024) * ratio,
+            ),
           ),
-        ),
-      );
-      canvas.height = Math.max(16, Math.round(canvas.width / ratio));
-      const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = item.color;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const asset = artworkAsset(item, face);
-      if (asset) {
-        const blob = await sourceBlob(repository, asset.id, detail ? 'detail' : 'overview');
-        const bitmap = await createImageBitmap(blob);
-        try {
-          const scale = Math.max(canvas.width / bitmap.width, canvas.height / bitmap.height);
-          ctx.drawImage(
-            bitmap,
-            (canvas.width - bitmap.width * scale) / 2,
-            (canvas.height - bitmap.height * scale) / 2,
-            bitmap.width * scale,
-            bitmap.height * scale,
-          );
-        } finally {
-          bitmap.close();
+        );
+        canvas.height = Math.max(16, Math.round(canvas.width / ratio));
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = item.color;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const asset = artworkAsset(item, face);
+        if (asset) {
+          const blob = await sourceBlob(repository, asset.id, detail ? 'detail' : 'overview');
+          const bitmap = await createImageBitmap(blob);
+          try {
+            const scale = Math.max(canvas.width / bitmap.width, canvas.height / bitmap.height);
+            ctx.drawImage(
+              bitmap,
+              (canvas.width - bitmap.width * scale) / 2,
+              (canvas.height - bitmap.height * scale) / 2,
+              bitmap.width * scale,
+              bitmap.height * scale,
+            );
+          } finally {
+            bitmap.close();
+          }
+        } else {
+          ctx.strokeStyle = '#ffffff16';
+          for (let y = 0; y < canvas.height; y += 5) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+          }
         }
-      } else {
-        ctx.strokeStyle = '#ffffff16';
-        for (let y = 0; y < canvas.height; y += 5) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-          ctx.stroke();
+        for (const layer of item.layers?.[face] || []) {
+          ctx.save();
+          ctx.translate(layer.x * canvas.width, layer.y * canvas.height);
+          ctx.rotate((layer.rotation * Math.PI) / 180);
+          const w = layer.width * canvas.width,
+            h = layer.height * canvas.height;
+          if (layer.type === 'image' && layer.assetId) {
+            const bitmap = await createImageBitmap(
+              await sourceBlob(repository, layer.assetId, detail ? 'detail' : 'overview'),
+            );
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
+            bitmap.close();
+          } else if (layer.type === 'text') {
+            ctx.fillStyle = layer.color;
+            ctx.font = `${h * 0.72}px ${layer.font}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(layer.text || '', 0, 0, w);
+          }
+          ctx.restore();
         }
-      }
-      for (const layer of item.layers?.[face] || []) {
-        ctx.save();
-        ctx.translate(layer.x * canvas.width, layer.y * canvas.height);
-        ctx.rotate((layer.rotation * Math.PI) / 180);
-        const w = layer.width * canvas.width,
-          h = layer.height * canvas.height;
-        if (layer.type === 'image' && layer.assetId) {
-          const bitmap = await createImageBitmap(
-            await sourceBlob(repository, layer.assetId, detail ? 'detail' : 'overview'),
-          );
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(bitmap, -w / 2, -h / 2, w, h);
-          bitmap.close();
-        } else if (layer.type === 'text') {
-          ctx.fillStyle = layer.color;
-          ctx.font = `${h * 0.72}px ${layer.font}`;
+        if (item.presentation?.textOverlay) {
+          ctx.fillStyle = '#fff';
+          ctx.shadowColor = '#000';
+          ctx.shadowBlur = 6;
           ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(layer.text || '', 0, 0, w);
+          ctx.font = `${Math.max(12, canvas.width / 12)}px Georgia`;
+          ctx.fillText(item.title, canvas.width / 2, canvas.height * 0.8, canvas.width * 0.85);
         }
-        ctx.restore();
-      }
-      if (item.presentation?.textOverlay) {
-        ctx.fillStyle = '#fff';
-        ctx.shadowColor = '#000';
-        ctx.shadowBlur = 6;
-        ctx.textAlign = 'center';
-        ctx.font = `${Math.max(12, canvas.width / 12)}px Georgia`;
-        ctx.fillText(item.title, canvas.width / 2, canvas.height * 0.8, canvas.width * 0.85);
-      }
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = 16;
-      texture.minFilter = THREE.LinearMipmapLinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      result.maps[face] = texture;
-    }
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 16;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        result.maps[face] = texture;
+      }),
+    );
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
     if (item.model) {
       const bytes = await (await sourceBlob(repository, item.model.id)).arrayBuffer();
       const manager = new THREE.LoadingManager();

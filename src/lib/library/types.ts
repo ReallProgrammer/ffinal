@@ -155,12 +155,16 @@ export interface LibraryRepository {
   place(id: string, shelfId: string, placement: Placement, expectedShelfId?: string): Promise<void>;
   saveGenre(name: string, id?: string): Promise<Genre>;
   removeGenre(id: string): Promise<void>;
+  removeGenres(selection: { ids: string[] } | { all: true }): Promise<{ deleted: string[] }>;
   split(
     id: string,
     panels: { role: string; start: number; end: number }[],
   ): Promise<Record<'front' | 'spine' | 'back', BookAsset>>;
   orphanAssets(): Promise<{ id: string; filename: string; bytes: number }[]>;
   removeAsset(id: string): Promise<void>;
+  removeAssets(
+    selection: { ids: string[] } | { all: true },
+  ): Promise<{ deleted: string[]; failed: { id: string; error: string }[] }>;
 }
 
 export function artworkAsset(item: LibraryBook, kind: AssetKind): BookAsset | null | undefined {

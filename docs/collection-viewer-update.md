@@ -41,3 +41,5 @@ No new provider is required to complete the requested features. Changing region,
 ## Verification
 
 The real PostgreSQL/S3 integration suite covers owner-only bulk cleanup, associated and legacy genres, file conflicts and preserved referenced files. Delete-all tests run in an isolated database schema. Existing model, crop, upload, PDF, persistence and migration tests remain in place. Desktop/mobile browser checks exercise animated loading, near/far zoom limits, right-drag panning, category order, left shelf selection, matching buttons and popup-free cleanup against the actual local API.
+
+Verified release checks: the production TypeScript/Vite build passes; all 31 backend tests pass, including migration and isolated cleanup tests. The full desktop run passed 43 checks; its initial single-wheel zoom test was corrected to use repeated wheel events, and both affected viewer/cleanup tests passed on re-run. The full mobile run passed 38 checks with six intentional existing desktop-only skips. Extreme near/far zoom and horizontal right-drag were exercised for books, certificates and generic models.

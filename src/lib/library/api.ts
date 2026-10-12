@@ -186,4 +186,10 @@ export const libraryApi: LibraryRepository = {
   async removeAsset(id) {
     await mutation(`/admin/assets/${id}`, 'DELETE');
   },
+  async removeAssets(selection) {
+    return (await mutation('/admin/assets/delete', 'POST', selection)).json();
+  },
+  async removeGenres(selection) {
+    return (await mutation('/admin/genres/delete', 'POST', selection)).json();
+  },
 };

@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
 import type { LibraryRepository } from '../../lib/library/types';
+import type { ReactNode } from 'react';
+import { sourceBlob } from '../../lib/library/asset-cache';
 export default function CollectionThumbnail({
   id,
   repository,
   color,
+  fallback,
 }: {
   id: string;
   repository: LibraryRepository;
   color: string;
+  fallback?: ReactNode;
 }) {
   const [url, setUrl] = useState('');
   useEffect(() => {
     let active = true,
       source = '';
-    repository
-      .texture(id)
+    sourceBlob(repository, id)
       .then((blob) => {
         source = URL.createObjectURL(blob);
         if (active) setUrl(source);
@@ -29,6 +32,6 @@ export default function CollectionThumbnail({
   return url ? (
     <img className="collection-thumbnail" src={url} alt="" />
   ) : (
-    <i style={{ background: color }} />
+    fallback || <i style={{ background: color }} />
   );
 }

@@ -7,6 +7,7 @@ import type { OrbitControls as Orbit } from 'three-stdlib';
 import BookModel from './BookModel';
 import { objectType, footprint } from '../../lib/library/registry';
 import type { LibraryBook, LibraryRepository, LibraryShelf } from '../../lib/library/types';
+import { objectViewBounds } from '../../lib/library/view';
 class SceneBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -49,7 +50,11 @@ function Rig({
   reduced,
   orbitRef,
   extent = 3,
+  item,
+  open,
 }: {
+  item?: LibraryBook;
+  open?: boolean;
   extent?: number;
   selected: boolean;
   target: THREE.Vector3;
@@ -63,13 +68,16 @@ function Rig({
   const destination = useMemo(
     () =>
       new THREE.Vector3(
-        selected ? 1.5 : 1,
+        target.x + (selected ? 0.35 : 1),
         target.y + (selected ? 0.2 : 0.8),
         selected
-          ? target.z + Math.max(6, extent * 1.7, ((extent * size.height) / size.width) * 1.5)
+          ? target.z +
+              (item
+                ? objectViewBounds(item, size.width / size.height, 42, open).fitDistance
+                : Math.max(6, extent * 1.7))
           : Math.max(14, target.y * 3.4, (14 * size.height) / size.width),
       ),
-    [selected, target, size.width, size.height, extent],
+    [selected, target, size.width, size.height, extent, item, open],
   );
   useEffect(() => {
     animate.current = true;
@@ -95,6 +103,93 @@ function Rig({
     if (reduced || elapsed.current > 1.6) animate.current = false;
   });
   return null;
+}
+function ViewingControls({
+  item,
+  center,
+  orbitRef,
+  reduced,
+  open,
+  autoRotate = false,
+  roomDistance = 34,
+}: {
+  item?: LibraryBook;
+  center: THREE.Vector3;
+  orbitRef: React.RefObject<Orbit | null>;
+  reduced: boolean;
+  open?: boolean;
+  autoRotate?: boolean;
+  roomDistance?: number;
+}) {
+  const { camera, size, gl, invalidate } = useThree();
+  const bounds = item
+    ? objectViewBounds(
+        item,
+        size.width / size.height,
+        (camera as THREE.PerspectiveCamera).fov,
+        open,
+      )
+    : null;
+  const offset = useMemo(() => new THREE.Vector3(), []);
+  useFrame(() => {
+    const controls = orbitRef.current;
+    if (!controls || !bounds) return;
+    // Cursor zoom and right-drag may move the orbit target. Keep both the target
+    // and camera around this object's enclosure, including when viewing its back.
+    offset.copy(controls.target).sub(center);
+    const limit = bounds.radius * 0.55;
+    if (offset.length() > limit) {
+      const previous = controls.target.clone();
+      controls.target.copy(center).add(offset.setLength(limit));
+      camera.position.add(controls.target.clone().sub(previous));
+    }
+    offset.copy(camera.position).sub(center);
+    if (offset.length() < bounds.minDistance) {
+      if (!offset.lengthSq()) offset.set(0, 0, 1);
+      camera.position.copy(center).add(offset.setLength(bounds.minDistance));
+      invalidate();
+    }
+    offset.copy(camera.position).sub(controls.target);
+    if (offset.length() > bounds.maxDistance) {
+      camera.position.copy(controls.target).add(offset.setLength(bounds.maxDistance));
+      invalidate();
+    }
+    camera.lookAt(controls.target);
+    const node = gl.domElement.parentElement;
+    if (node) {
+      node.dataset.viewDistance = camera.position.distanceTo(center).toFixed(3);
+      node.dataset.viewOrbitDistance = camera.position.distanceTo(controls.target).toFixed(3);
+      node.dataset.viewMinimum = bounds.minDistance.toFixed(3);
+      node.dataset.viewMaximum = bounds.maxDistance.toFixed(3);
+      node.dataset.viewTargetX = controls.target.x.toFixed(3);
+      node.dataset.viewTargetOffset = controls.target.distanceTo(center).toFixed(3);
+      node.dataset.viewRadius = bounds.radius.toFixed(3);
+    }
+  });
+  return (
+    <OrbitControls
+      ref={orbitRef}
+      makeDefault
+      autoRotate={Boolean(item && autoRotate && !reduced)}
+      autoRotateSpeed={0.8}
+      enablePan
+      screenSpacePanning
+      panSpeed={0.6}
+      zoomSpeed={0.55}
+      rotateSpeed={0.7}
+      zoomToCursor
+      mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
+      touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+      minDistance={bounds?.minDistance || 6}
+      maxDistance={bounds?.maxDistance || roomDistance}
+      minPolarAngle={item ? 0.12 : 0.55}
+      maxPolarAngle={item ? Math.PI - 0.12 : 1.65}
+      minAzimuthAngle={item ? -Infinity : -0.6}
+      maxAzimuthAngle={item ? Infinity : 0.6}
+      enableDamping={!reduced}
+      dampingFactor={0.12}
+    />
+  );
 }
 function Room({
   books,
@@ -256,21 +351,14 @@ function Room({
           );
         });
       })}
-      <OrbitControls
-        ref={orbit}
-        makeDefault
-        autoRotate={Boolean(selected && autoRotate && !reduced)}
-        autoRotateSpeed={0.8}
-        enablePan={!selected}
-        zoomToCursor
-        minDistance={selected ? 0.6 : 3}
-        maxDistance={Math.max(34, height * 3)}
-        minPolarAngle={0.55}
-        maxPolarAngle={1.65}
-        minAzimuthAngle={selected ? -Infinity : -0.6}
-        maxAzimuthAngle={selected ? Infinity : 0.6}
-        enableDamping={!reduced}
-        dampingFactor={0.12}
+      <ViewingControls
+        item={inspected}
+        center={target}
+        orbitRef={orbit}
+        reduced={reduced}
+        open={caseOpen}
+        autoRotate={autoRotate}
+        roomDistance={Math.max(22, height * 2.4)}
       />
       <Rig
         extent={
@@ -283,6 +371,8 @@ function Room({
         zoom={zoom}
         reduced={reduced}
         orbitRef={orbit}
+        item={inspected}
+        open={caseOpen}
       />
     </>
   );
@@ -386,6 +476,8 @@ export function BookPreview({
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const orbit = useRef<Orbit>(null);
+  const center = useMemo(() => new THREE.Vector3(), []);
   return (
     <SceneBoundary fallback={<p>3D preview is unavailable on this device.</p>}>
       <div className="book-preview" data-textures-ready={ready}>
@@ -403,7 +495,22 @@ export function BookPreview({
             onReady={setReady}
             onError={setError}
           />
-          <OrbitControls zoomToCursor enablePan minDistance={0.4} maxDistance={14} />
+          <ViewingControls
+            item={book}
+            center={center}
+            orbitRef={orbit}
+            reduced={reduced}
+            open={open}
+          />
+          <Rig
+            item={book}
+            open={open}
+            selected
+            target={center}
+            zoom={1}
+            reduced={reduced}
+            orbitRef={orbit}
+          />
         </Canvas>
         {objectType(book).geometry === 'case' && (
           <button type="button" onClick={() => setOpen((v) => !v)}>
@@ -411,7 +518,10 @@ export function BookPreview({
           </button>
         )}
         <small>
-          {error || (ready ? 'Drag to turn · scroll to zoom' : 'Preparing cover textures…')}
+          {error ||
+            (ready
+              ? 'Drag to rotate · right-drag to pan · scroll to zoom'
+              : 'Preparing cover textures…')}
         </small>
       </div>
     </SceneBoundary>

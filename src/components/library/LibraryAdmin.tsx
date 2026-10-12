@@ -4,6 +4,8 @@ import { objectTypes } from '../../lib/library/registry';
 import CollectionOrganizer from './CollectionOrganizer';
 import { presetPresentation } from '../../lib/library/presets';
 import CollectionEditor, { defaultPresentation } from './CollectionEditor';
+import CollectionFormatIcon from './CollectionFormatIcon';
+import GenreEditor from './GenreEditor';
 export const newBook = (shelfId: string, typeId = 'book'): LibraryBook => {
   const type = objectTypes.find((t) => t.id === typeId)!;
   const [width, height, thickness] = type.dimensions;
@@ -56,6 +58,8 @@ export default function LibraryAdmin({
     [busy, setBusy] = useState(false),
     [name, setName] = useState(''),
     [editing, setEditing] = useState(''),
+    [showGenres, setShowGenres] = useState(false),
+    [selectedUploads, setSelectedUploads] = useState<string[]>([]),
     [orphans, setOrphans] = useState<{ id: string; filename: string; bytes: number }[] | null>(
       null,
     );
@@ -109,7 +113,7 @@ export default function LibraryAdmin({
                   setChoosing(false);
                 }}
               >
-                <span className={`type-silhouette type-${type.geometry}`} />
+                <CollectionFormatIcon typeId={type.id} />
                 <strong>{type.label}</strong>
                 <small>
                   {type.surfaces.join(' · ')}
@@ -139,12 +143,17 @@ export default function LibraryAdmin({
               ＋ Add to Collection
             </button>
             <button
-              className="xp-button"
+              className="library-read-button"
+              disabled={busy}
               onClick={() => void work(async () => setOrphans(await repository.orphanAssets()))}
             >
               Unused uploads
             </button>
+            <button className="library-read-button" onClick={() => setShowGenres(!showGenres)}>
+              Manage genres
+            </button>
           </div>
+          {showGenres && <GenreEditor initialGenres={data.genres || []} repository={repository} />}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -181,19 +190,76 @@ export default function LibraryAdmin({
                 Includes replaced originals and crop variants. Deleting removes their stored files
                 permanently.
               </p>
+              <div className="collection-bulk-tools">
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all unused uploads"
+                    checked={!!orphans.length && selectedUploads.length === orphans.length}
+                    onChange={(e) =>
+                      setSelectedUploads(e.target.checked ? orphans.map((a) => a.id) : [])
+                    }
+                  />
+                  Select all
+                </label>
+                <button
+                  disabled={busy || !selectedUploads.length}
+                  onClick={() =>
+                    void work(async () => {
+                      const result = await repository.removeAssets({ ids: selectedUploads });
+                      setSelectedUploads([]);
+                      setOrphans(await repository.orphanAssets());
+                      if (result.failed.length)
+                        throw new Error(
+                          `${result.deleted.length} removed. ${result.failed.map((f) => f.error).join(' ')}`,
+                        );
+                    })
+                  }
+                >
+                  Delete selected uploads
+                </button>
+                <button
+                  disabled={busy || !orphans.length}
+                  onClick={() =>
+                    void work(async () => {
+                      const result = await repository.removeAssets({ all: true });
+                      setSelectedUploads([]);
+                      setOrphans(await repository.orphanAssets());
+                      if (result.failed.length)
+                        throw new Error(
+                          `${result.deleted.length} removed. ${result.failed.map((f) => f.error).join(' ')}`,
+                        );
+                    })
+                  }
+                >
+                  Delete all unused uploads
+                </button>
+              </div>
               {orphans.map((a) => (
                 <div key={a.id}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select upload ${a.filename}`}
+                    checked={selectedUploads.includes(a.id)}
+                    onChange={(e) =>
+                      setSelectedUploads(
+                        e.target.checked
+                          ? [...selectedUploads, a.id]
+                          : selectedUploads.filter((id) => id !== a.id),
+                      )
+                    }
+                  />
                   <span>
                     {a.filename} · {Math.ceil(a.bytes / 1024)} KB
                   </span>
                   <button
                     disabled={busy}
                     onClick={() => {
-                      if (confirm('Permanently delete this unused file?'))
-                        void work(async () => {
-                          await repository.removeAsset(a.id);
-                          setOrphans(await repository.orphanAssets());
-                        });
+                      void work(async () => {
+                        await repository.removeAsset(a.id);
+                        setSelectedUploads((ids) => ids.filter((id) => id !== a.id));
+                        setOrphans(await repository.orphanAssets());
+                      });
                     }}
                   >
                     Delete unused file
