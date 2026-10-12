@@ -111,6 +111,11 @@ test(
     });
     assert.equal(r.status, 201);
     const id = (await r.json()).id;
+    // Simulate a legacy record, bypassing the current canonical association writer.
+    await db.query(
+      "UPDATE books SET metadata=jsonb_set(metadata,'{genre}','\" Legacy subject \"'::jsonb) WHERE id=$1",
+      [id],
+    );
     assert.equal(
       (await call('/admin/genres/' + genres[0].id, 'PUT', { name: 'Renamed legacy subject' }))
         .status,
@@ -173,5 +178,47 @@ test(
     assert.deepEqual(all.failed, []);
     assert.equal((await call('/assets/' + used, 'GET', undefined, false)).status, 200);
     assert.deepEqual(await (await call('/admin/assets')).json(), []);
+  },
+);
+
+test(
+  'genre categories persist, allow the same label across formats, and stale metadata cannot revive deleted genres',
+  { skip: !configured },
+  async () => {
+    const book = await (
+      await call('/admin/genres', 'POST', { name: 'Adventure', category: 'books' })
+    ).json();
+    const game = await (
+      await call('/admin/genres', 'POST', { name: 'Adventure', category: 'games' })
+    ).json();
+    assert.notEqual(book.id, game.id);
+    assert.equal(
+      (await call('/admin/genres', 'POST', { name: 'Adventure', category: 'books' })).status,
+      409,
+    );
+    const payload = {
+      title: 'Scoped genre object',
+      objectType: 'book',
+      shelfId: shelf,
+      width: 2,
+      height: 3,
+      thickness: 0.2,
+      color: '#456789',
+      genre: 'Adventure',
+      genreIds: [book.id],
+    };
+    const created = await call('/admin/items', 'POST', payload);
+    assert.equal(created.status, 201);
+    const id = (await created.json()).id;
+    await call('/admin/genres/' + book.id, 'DELETE');
+    assert.equal((await call('/admin/items/' + id, 'PUT', payload)).status, 409);
+    assert.equal(
+      (await call('/admin/items/' + id, 'PUT', { ...payload, genreIds: [] })).status,
+      200,
+    );
+    const listed = await (await call('/admin/collection')).json();
+    assert.equal(listed.books.find((b) => b.id === id).genre, '');
+    assert.equal(listed.genres.find((g) => g.id === game.id).category, 'games');
+    await call('/admin/genres/' + game.id, 'DELETE');
   },
 );

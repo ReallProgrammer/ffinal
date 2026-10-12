@@ -39,6 +39,21 @@ export async function migrate(db) {
         INSERT INTO library_migrations(version) VALUES(3);
       `);
     }
+    if (!(await c.query('SELECT 1 FROM library_migrations WHERE version=4')).rowCount) {
+      await c.query(`
+        ALTER TABLE genres ADD COLUMN category text NOT NULL DEFAULT 'all'
+          CHECK(category IN ('all','books','games','media','certificates','objects'));
+        DROP INDEX genres_name;
+        CREATE UNIQUE INDEX genres_name ON genres(category,lower(name));
+        INSERT INTO genres(id,name)
+          SELECT DISTINCT ON(lower(trim(metadata->>'genre'))) md5('collection-genre:' || lower(trim(metadata->>'genre')))::uuid,trim(metadata->>'genre')
+          FROM books WHERE length(trim(coalesce(metadata->>'genre','')))>0
+          AND NOT EXISTS(SELECT 1 FROM genres WHERE lower(name)=lower(trim(books.metadata->>'genre')))
+          ON CONFLICT DO NOTHING;
+        INSERT INTO book_genres SELECT b.id,g.id FROM books b JOIN genres g ON lower(trim(b.metadata->>'genre'))=lower(g.name) ON CONFLICT DO NOTHING;
+        INSERT INTO library_migrations(version) VALUES(4);
+      `);
+    }
     // The API's table-owning DB role remains functional. Untrusted Data API roles get no policies.
     for (const table of ['books', 'assets', 'shelves', 'sessions', 'library_migrations'])
       await c.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);

@@ -102,7 +102,7 @@ export function createApp({ db, s3, config }) {
     const [shelfResult, recordResult, genreResult] = await Promise.all([
       db.query('SELECT id,name,position,appearance FROM shelves ORDER BY position,id'),
       db.query(`SELECT * FROM books ${admin ? '' : 'WHERE published=true'} ORDER BY position,id`),
-      db.query('SELECT id,name FROM genres ORDER BY lower(name),id'),
+      db.query('SELECT id,name,category FROM genres ORDER BY lower(name),id'),
     ]);
     const shelves = shelfResult.rows,
       records = recordResult.rows,
@@ -493,6 +493,7 @@ export function createApp({ db, s3, config }) {
       ...metadata
     } = input;
     metadata.layers = layers;
+    if (genreIds !== undefined) metadata.genre = ''; // Managed associations are authoritative.
     const client = await db.connect();
     let id = create ? randomUUID() : uuid.parse(req.params.id);
     try {

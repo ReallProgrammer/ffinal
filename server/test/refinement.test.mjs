@@ -98,6 +98,18 @@ test('wrap panels, interior textures, layers and genres persist with correct pub
   assets.push(...Object.values(panels).map((v) => v.id));
   assert.equal(panels.spine.width, 200);
   assert.equal(panels.front.width, 800);
+  for (const [role, channel] of [
+    ['back', 0],
+    ['spine', 1],
+    ['front', 2],
+  ]) {
+    const response = await call('/assets/' + panels[role].id + '?original=1');
+    assert.equal(response.status, 200);
+    const channels = (await sharp(Buffer.from(await response.arrayBuffer())).stats()).channels;
+    assert.ok(channels[channel].mean > (role === 'spine' ? 120 : 240));
+    assert.ok(channels[(channel + 1) % 3].mean < 10);
+  }
+
   const genre = await (
     await call('/admin/genres', 'POST', { name: 'Refinement ' + randomUUID() })
   ).json();

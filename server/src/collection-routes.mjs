@@ -117,11 +117,19 @@ export function collectionRoutes({ api, db, s3, config, owner, problem, reorder 
     });
     res.sendStatus(204);
   });
-  const genre = z.object({ name: z.string().trim().min(1).max(80) }).strict();
+  const genre = z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      category: z
+        .enum(['all', 'books', 'games', 'media', 'certificates', 'objects'])
+        .default('all'),
+    })
+    .strict();
   async function deleteGenres(ids, all = false) {
     const c = await db.connect();
     try {
       await c.query('BEGIN');
+      await c.query('LOCK TABLE books IN EXCLUSIVE MODE');
       const selected = (
         await c.query(
           `SELECT id,name FROM genres ${all ? '' : 'WHERE id=ANY($1::uuid[])'} FOR UPDATE`,
@@ -145,21 +153,22 @@ export function collectionRoutes({ api, db, s3, config, owner, problem, reorder 
     }
   }
   api.post('/admin/genres', owner, async (req, res) => {
-    const { name } = genre.parse(req.body),
+    const { name, category } = genre.parse(req.body),
       id = randomUUID();
-    await db.query('INSERT INTO genres(id,name) VALUES($1,$2)', [id, name]);
-    res.status(201).json({ id, name });
+    await db.query('INSERT INTO genres(id,name,category) VALUES($1,$2,$3)', [id, name, category]);
+    res.status(201).json({ id, name, category });
   });
   api.put('/admin/genres/:id', owner, async (req, res) => {
-    const { name } = genre.parse(req.body);
+    const { name, category } = genre.parse(req.body);
     const c = await db.connect();
     try {
       await c.query('BEGIN');
+      await c.query('LOCK TABLE books IN EXCLUSIVE MODE');
       const id = uuid.parse(req.params.id);
       const existing = (await c.query('SELECT name FROM genres WHERE id=$1 FOR UPDATE', [id]))
         .rows[0];
       if (!existing) throw problem(404, 'Genre not found.');
-      await c.query('UPDATE genres SET name=$2 WHERE id=$1', [id, name]);
+      await c.query('UPDATE genres SET name=$2,category=$3 WHERE id=$1', [id, name, category]);
       await c.query(
         "UPDATE books SET metadata=jsonb_set(metadata,'{genre}',to_jsonb($2::text)),updated_at=now() WHERE lower(btrim(metadata->>'genre'))=$1",
         [existing.name.trim().toLowerCase(), name],
