@@ -28,7 +28,7 @@ The existing session, shelf, asset and document contracts remain in force. `/col
 
 Common item fields retain title, description, genre, year, shelfId, position, published, dimensions and asset references. New fields are `objectType`, `details`, `presentation`, and optional model UUID. Derived `category` follows the registry and cannot be spoofed. Type-specific fields are strict: certificates cannot receive irrelevant book-publisher data. Uploaded typography is opt-in through `presentation.textOverlay`, false by default. Scale/rotation apply to generic models; dimensions determine their bounding box and shelf footprint.
 
-GLB/glTF must embed all buffers and images. No external URI, scripts, compressed/unknown extensions, skinning or animations are accepted. Limits: 100 nodes, 80 meshes, 64 materials, 16 textures, 250,000 vertices/triangles including instances, 4096 px per texture edge and 24 million total texture pixels. Use a standard static glTF 2.0 export. Server validation checks binary structure and Khronos glTF validation before storage.
+GLB/glTF must embed all buffers and images. No external URI, scripts, compressed/unknown extensions, skinning or animations are accepted. No fixed node, mesh, material, image, vertex or triangle count ceilings apply. Resource limits: 25 MB uploaded file, 40 MB decoded buffers, 4096 px per texture edge and 24 million total decoded texture pixels. Use a standard static glTF 2.0 export. Server validation checks binary structure and Khronos glTF validation before storage.
 
 ## Release from the review branch
 

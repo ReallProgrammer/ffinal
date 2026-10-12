@@ -174,17 +174,47 @@ test('new mutation aliases reject anonymous access and mismatched metadata', asy
     400,
   );
 });
-test('model validation rejects external resources, invalid data and excessive instances', async () => {
+test('model validation rejects external resources and invalid data without topology count limits', async () => {
   const good = JSON.parse(modelFixture());
   good.buffers[0].uri = 'https://example.test/model.bin';
   await assert.rejects(validateModel(Buffer.from(JSON.stringify(good))), /embed/);
   await assert.rejects(validateModel(Buffer.from('invalid')), /Malformed/);
   const excessive = JSON.parse(modelFixture());
   excessive.nodes = Array.from({ length: 101 }, () => ({ mesh: 0 }));
-  await assert.rejects(validateModel(Buffer.from(JSON.stringify(excessive))), /100 nodes/);
+  excessive.meshes = Array.from({ length: 90 }, () => structuredClone(excessive.meshes[0]));
+  excessive.nodes = Array.from({ length: 150 }, (_, mesh) => ({ mesh: mesh % 90 }));
+  excessive.materials = Array.from({ length: 70 }, () => ({}));
+  const pixel = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#778899' } })
+    .png()
+    .toBuffer();
+  excessive.images = Array.from({ length: 20 }, () => ({
+    uri: 'data:image/png;base64,' + pixel.toString('base64'),
+  }));
+  const validated = await validateModel(Buffer.from(JSON.stringify(excessive)));
+  assert.equal(validated.details.vertices, 450);
+  assert.equal(validated.details.images, 20);
+  const dense = JSON.parse(modelFixture());
+  const count = 900003;
+  dense.buffers[0] = {
+    byteLength: count * 12,
+    uri: 'data:application/octet-stream;base64,' + Buffer.alloc(count * 12).toString('base64'),
+  };
+  dense.bufferViews[0].byteLength = count * 12;
+  dense.accessors[0] = {
+    bufferView: 0,
+    componentType: 5126,
+    count,
+    type: 'VEC3',
+    min: [0, 0, 0],
+    max: [0, 0, 0],
+  };
+  assert.equal((await validateModel(Buffer.from(JSON.stringify(dense)))).details.vertices, count);
 });
 test('binary GLB uploads retain validated model data and reject corrupt chunk lengths', async () => {
   const json = JSON.parse(modelFixture());
+  json.meshes = Array.from({ length: 90 }, () => structuredClone(json.meshes[0]));
+  json.nodes = Array.from({ length: 150 }, (_, mesh) => ({ mesh: mesh % 90 }));
+  json.materials = Array.from({ length: 70 }, () => ({}));
   const binary = Buffer.from(json.buffers[0].uri.split(',')[1], 'base64');
   delete json.buffers[0].uri;
   const source = Buffer.from(JSON.stringify(json));
@@ -202,7 +232,7 @@ test('binary GLB uploads retain validated model data and reject corrupt chunk le
   binary.copy(glb, 28 + padded.length);
   const uploaded = await up('model', glb, 'triangle.glb');
   assert.equal(uploaded.mime, 'model/gltf-binary');
-  assert.equal(uploaded.vertices, 3);
+  assert.equal(uploaded.vertices, 450);
   assert.deepEqual(Buffer.from(await (await call('/assets/' + uploaded.id)).arrayBuffer()), glb);
   glb.writeUInt32LE(binary.length + 4, 20 + padded.length);
   await assert.rejects(validateModel(glb), /validation|Malformed/);

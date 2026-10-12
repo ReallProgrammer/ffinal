@@ -97,40 +97,43 @@ export function createApp({ db, s3, config }) {
   });
   api.get('/session', owner, (_req, res) => res.json({ email: config.ownerEmail }));
   async function library(admin = false) {
-    const shelves = (
-      await db.query('SELECT id,name,position,appearance FROM shelves ORDER BY position,id')
-    ).rows;
-    const records = (
-      await db.query(
-        `SELECT * FROM books ${admin ? '' : 'WHERE published=true'} ORDER BY position,id`,
-      )
-    ).rows;
-    const links = (
-      await db.query('SELECT * FROM book_assets WHERE book_id=ANY($1::uuid[])', [
-        records.map((r) => r.id),
-      ])
-    ).rows;
-    const genres = (await db.query('SELECT id,name FROM genres ORDER BY lower(name),id')).rows;
-    const associations = (
-      await db.query('SELECT * FROM book_genres WHERE book_id=ANY($1::uuid[])', [
-        records.map((r) => r.id),
-      ])
-    ).rows;
-    const assets = (
-      await db.query('SELECT id,kind,mime,filename,details FROM assets WHERE id=ANY($1::uuid[])', [
+    // Independent reads share one network round trip; dependent asset/link reads
+    // run together once the item IDs are known. No stale public-data cache.
+    const [shelfResult, recordResult, genreResult] = await Promise.all([
+      db.query('SELECT id,name,position,appearance FROM shelves ORDER BY position,id'),
+      db.query(`SELECT * FROM books ${admin ? '' : 'WHERE published=true'} ORDER BY position,id`),
+      db.query('SELECT id,name FROM genres ORDER BY lower(name),id'),
+    ]);
+    const shelves = shelfResult.rows,
+      records = recordResult.rows,
+      genres = genreResult.rows;
+    const ids = records.map((r) => r.id);
+    const [linkResult, associationResult, assetResult] = await Promise.all([
+      db.query('SELECT * FROM book_assets WHERE book_id=ANY($1::uuid[])', [ids]),
+      db.query('SELECT * FROM book_genres WHERE book_id=ANY($1::uuid[])', [ids]),
+      db.query(
+        'SELECT id,kind,mime,filename,details FROM assets WHERE id=ANY($1::uuid[]) OR id IN (SELECT asset_id FROM book_assets WHERE book_id=ANY($2::uuid[]))',
         [
-          ...records.flatMap((r) => [r.front, r.spine, r.back, r.digital, r.model]),
-          ...links.map((l) => l.asset_id),
-        ].filter(Boolean),
-      ])
-    ).rows;
+          records.flatMap((r) => [r.front, r.spine, r.back, r.digital, r.model]).filter(Boolean),
+          ids,
+        ],
+      ),
+    ]);
+    const assetIndex = new Map(assetResult.rows.map((a) => [a.id, a]));
+    const linksByBook = new Map(),
+      genresByBook = new Map();
+    for (const link of linkResult.rows) {
+      if (!linksByBook.has(link.book_id)) linksByBook.set(link.book_id, []);
+      linksByBook.get(link.book_id).push(link);
+    }
+    for (const association of associationResult.rows) {
+      if (!genresByBook.has(association.book_id)) genresByBook.set(association.book_id, []);
+      genresByBook.get(association.book_id).push(association.genre_id);
+    }
     const books = records.map((row) => {
+      const links = linksByBook.get(row.id) || [];
       const asset = (kind) => {
-        const a = assets.find(
-          (a) =>
-            a.id ===
-            (row[kind] || links.find((l) => l.book_id === row.id && l.role === kind)?.asset_id),
-        );
+        const a = assetIndex.get(row[kind] || links.find((l) => l.role === kind)?.asset_id);
         return a ? { id: a.id, mime: a.mime, filename: a.filename, ...a.details } : null;
       };
       const canRead = Boolean(row.digital && (admin || row.metadata.digitalAccess === 'public'));
@@ -158,7 +161,7 @@ export function createApp({ db, s3, config }) {
             .filter((l) => l.book_id === row.id && l.role.startsWith('layer:'))
             .map((l) => [l.asset_id, asset(l.role)]),
         ),
-        genreIds: associations.filter((g) => g.book_id === row.id).map((g) => g.genre_id),
+        genreIds: genresByBook.get(row.id) || [],
         model: asset('model'),
         front: asset('front'),
         spine: asset('spine'),
@@ -580,8 +583,7 @@ export function createApp({ db, s3, config }) {
       ).rows,
     ),
   );
-  api.delete('/admin/assets/:id', owner, async (req, res) => {
-    const id = uuid.parse(req.params.id);
+  async function deleteUnusedAsset(id) {
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -605,13 +607,47 @@ export function createApp({ db, s3, config }) {
         await client.query('DELETE FROM assets WHERE id=$1', [id]);
       }
       await client.query('COMMIT');
-      res.sendStatus(204);
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
     } finally {
       client.release();
     }
+  }
+  api.delete('/admin/assets/:id', owner, async (req, res) => {
+    await deleteUnusedAsset(uuid.parse(req.params.id));
+    res.sendStatus(204);
+  });
+  api.post('/admin/assets/delete', owner, async (req, res) => {
+    const input = z
+      .object({ ids: z.array(uuid).min(1).max(500).optional(), all: z.literal(true).optional() })
+      .strict()
+      .refine((value) => Boolean(value.ids) !== Boolean(value.all))
+      .parse(req.body);
+    const ids = input.all
+      ? (
+          await db.query(
+            'SELECT id FROM assets WHERE NOT EXISTS (SELECT 1 FROM books WHERE assets.id IN (front,spine,back,digital,model)) AND NOT EXISTS (SELECT 1 FROM book_assets WHERE asset_id=assets.id) ORDER BY created_at',
+          )
+        ).rows.map((a) => a.id)
+      : [...new Set(input.ids)];
+    const deleted = [],
+      failed = [];
+    for (const id of ids) {
+      try {
+        await deleteUnusedAsset(id);
+        deleted.push(id);
+      } catch (error) {
+        failed.push({
+          id,
+          error:
+            error.status === 409
+              ? 'This upload is now in use.'
+              : 'Storage deletion failed. Retry this upload.',
+        });
+      }
+    }
+    res.json({ deleted, failed });
   });
   app.use((_req, _res, next) => next(problem(404, 'Endpoint not found.')));
   app.use((err, _req, res, _next) => {

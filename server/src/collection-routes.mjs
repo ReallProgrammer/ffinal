@@ -118,6 +118,32 @@ export function collectionRoutes({ api, db, s3, config, owner, problem, reorder 
     res.sendStatus(204);
   });
   const genre = z.object({ name: z.string().trim().min(1).max(80) }).strict();
+  async function deleteGenres(ids, all = false) {
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      const selected = (
+        await c.query(
+          `SELECT id,name FROM genres ${all ? '' : 'WHERE id=ANY($1::uuid[])'} FOR UPDATE`,
+          all ? [] : [ids],
+        )
+      ).rows;
+      // Remove legacy strings as well as associations, so a deleted migrated
+      // genre cannot remain visible or be restored by an older editor.
+      await c.query(
+        `UPDATE books SET metadata=jsonb_set(metadata,'{genre}','""'::jsonb),updated_at=now() WHERE ${all ? "btrim(coalesce(metadata->>'genre',''))<>''" : "lower(btrim(metadata->>'genre'))=ANY($1::text[])"}`,
+        all ? [] : [selected.map((g) => g.name.trim().toLowerCase())],
+      );
+      await c.query('DELETE FROM genres WHERE id=ANY($1::uuid[])', [selected.map((g) => g.id)]);
+      await c.query('COMMIT');
+      return selected.map((g) => g.id);
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    } finally {
+      c.release();
+    }
+  }
   api.post('/admin/genres', owner, async (req, res) => {
     const { name } = genre.parse(req.body),
       id = randomUUID();
@@ -126,16 +152,38 @@ export function collectionRoutes({ api, db, s3, config, owner, problem, reorder 
   });
   api.put('/admin/genres/:id', owner, async (req, res) => {
     const { name } = genre.parse(req.body);
-    if (
-      !(await db.query('UPDATE genres SET name=$2 WHERE id=$1', [uuid.parse(req.params.id), name]))
-        .rowCount
-    )
-      throw problem(404, 'Genre not found.');
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      const id = uuid.parse(req.params.id);
+      const existing = (await c.query('SELECT name FROM genres WHERE id=$1 FOR UPDATE', [id]))
+        .rows[0];
+      if (!existing) throw problem(404, 'Genre not found.');
+      await c.query('UPDATE genres SET name=$2 WHERE id=$1', [id, name]);
+      await c.query(
+        "UPDATE books SET metadata=jsonb_set(metadata,'{genre}',to_jsonb($2::text)),updated_at=now() WHERE lower(btrim(metadata->>'genre'))=$1",
+        [existing.name.trim().toLowerCase(), name],
+      );
+      await c.query('COMMIT');
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    } finally {
+      c.release();
+    }
     res.sendStatus(204);
   });
   api.delete('/admin/genres/:id', owner, async (req, res) => {
-    await db.query('DELETE FROM genres WHERE id=$1', [uuid.parse(req.params.id)]);
+    await deleteGenres([uuid.parse(req.params.id)]);
     res.sendStatus(204);
+  });
+  api.post('/admin/genres/delete', owner, async (req, res) => {
+    const input = z
+      .object({ ids: z.array(uuid).min(1).max(500).optional(), all: z.literal(true).optional() })
+      .strict()
+      .refine((value) => Boolean(value.ids) !== Boolean(value.all))
+      .parse(req.body);
+    res.json({ deleted: await deleteGenres(input.ids, input.all) });
   });
   api.post(
     '/admin/assets/:id/split',

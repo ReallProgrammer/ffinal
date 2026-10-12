@@ -15,9 +15,14 @@ export async function validateModel(buffer) {
       )
         throw new Error();
       const len = buffer.readUInt32LE(12);
+      if (20 + len > buffer.length) throw new Error();
       json = JSON.parse(buffer.subarray(20, 20 + len).toString());
       if (buffer.length > 20 + len) {
-        if (buffer.readUInt32LE(24 + len) !== 0x004e4942) throw new Error();
+        if (
+          buffer.readUInt32LE(24 + len) !== 0x004e4942 ||
+          buffer.readUInt32LE(20 + len) !== buffer.length - 28 - len
+        )
+          throw new Error();
         bin = buffer.subarray(28 + len);
       }
     } else json = JSON.parse(buffer.toString());
@@ -25,17 +30,8 @@ export async function validateModel(buffer) {
     throw new Error('Malformed GLB / GLTF file.');
   }
   if (json.asset?.version !== '2.0') throw new Error('Use glTF 2.0.');
-  if (
-    (json.nodes?.length || 0) > 100 ||
-    (json.meshes?.length || 0) > 80 ||
-    (json.materials?.length || 0) > 64 ||
-    (json.images?.length || 0) > 16 ||
-    (json.animations?.length || 0) > 0 ||
-    (json.skins?.length || 0) > 0
-  )
-    throw new Error(
-      'Use a static model with at most 100 nodes, 80 meshes, 64 materials and 16 textures.',
-    );
+  if ((json.animations?.length || 0) > 0 || (json.skins?.length || 0) > 0)
+    throw new Error('Use a static model without animations or skinning.');
   if (
     (json.extensionsUsed || []).some(
       (e) =>
@@ -95,13 +91,15 @@ export async function validateModel(buffer) {
       triangles += (p.indices === undefined ? count : json.accessors?.[p.indices]?.count || 0) / 3;
     }
   }
-  if (!vertices || vertices > 250000 || triangles > 250000)
-    throw new Error(
-      'Models require 1–250,000 vertices and at most 250,000 triangles including instances.',
-    );
-  const result = binary
-    ? await validator.validateBytes(new Uint8Array(buffer), { maxIssues: 20 })
-    : await validator.validateString(buffer.toString(), { maxIssues: 20 });
+  if (!vertices) throw new Error('The model must contain renderable geometry.');
+  let result;
+  try {
+    result = binary
+      ? await validator.validateBytes(new Uint8Array(buffer), { maxIssues: 20 })
+      : await validator.validateString(buffer.toString(), { maxIssues: 20 });
+  } catch {
+    throw new Error('The model fails glTF validation. Re-export it with embedded resources.');
+  }
   if (result.issues.numErrors)
     throw new Error('The model fails glTF validation. Re-export it with embedded resources.');
   return {
