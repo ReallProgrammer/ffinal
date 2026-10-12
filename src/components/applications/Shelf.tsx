@@ -10,6 +10,7 @@ import LibraryAdmin from '../library/LibraryAdmin';
 import Reader from '../library/Reader';
 import ArtworkViewer from '../library/ArtworkViewer';
 import CollectionThumbnail from '../library/CollectionThumbnail';
+import CollectionFormatIcon from '../library/CollectionFormatIcon';
 import '../../library.css';
 import { categories, objectType } from '../../lib/library/registry';
 import { playSound } from '../../lib/sound';
@@ -53,7 +54,7 @@ export default function Shelf({
     [artworkReady, setArtworkReady] = useState(false);
   const [artworkError, setArtworkError] = useState('');
   const [sceneVersion, setSceneVersion] = useState(0);
-  const [category, setCategory] = useState('certificates'),
+  const [category, setCategory] = useState('all'),
     [autoRotate, setAutoRotate] = useState(false),
     [resetKey, setResetKey] = useState(0),
     [caseOpen, setCaseOpen] = useState(false);
@@ -66,26 +67,32 @@ export default function Shelf({
     setZoom(1);
     cue('close');
   };
-  const load = useCallback(async () => {
-    if (!repository.configured) {
-      setLoading(false);
-      return;
-    }
-    setError('');
-    (await import('../library/resources')).clearCollectionCache(repository);
-    try {
-      const next = await repository.list(repository.isOwner());
-      setData(next);
-      setSceneVersion((v) => v + 1);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [repository]);
+  const loadSequence = useRef(0);
+  const load = useCallback(
+    async (refresh = false) => {
+      const sequence = ++loadSequence.current;
+      if (!repository.configured) {
+        setLoading(false);
+        return;
+      }
+      setError('');
+      try {
+        if (refresh) (await import('../library/resources')).clearCollectionCache(repository);
+        const next = await repository.list(repository.isOwner());
+        if (sequence !== loadSequence.current) return;
+        setData(next);
+        if (refresh) setSceneVersion((v) => v + 1);
+      } catch (e) {
+        if (sequence === loadSequence.current) setError((e as Error).message);
+      } finally {
+        if (sequence === loadSequence.current) setLoading(false);
+      }
+    },
+    [repository],
+  );
   useEffect(() => {
     void load();
-    const changed = () => {
+    const changed = (event: Event) => {
       setOwner(repository.isOwner());
       if (!repository.isOwner()) {
         void import('../library/resources').then((m) => m.clearCollectionCache(repository));
@@ -93,7 +100,7 @@ export default function Shelf({
         setReading(null);
         setMode((m) => (m === 'manage' ? 'login' : m));
       }
-      void load();
+      void load(event.type === 'pc-refresh');
     };
     window.addEventListener('library-change', changed);
     window.addEventListener('pc-refresh', changed);
@@ -223,7 +230,7 @@ export default function Shelf({
             label: 'Library',
             items: [
               { label: 'Browse books', action: () => setMode('library') },
-              { label: 'Refresh', action: () => void load() },
+              { label: 'Refresh', action: () => void load(true) },
               ...(category === 'books'
                 ? [
                     {
@@ -458,7 +465,7 @@ export default function Shelf({
           {error && (
             <div className="library-error" role="alert">
               {error}
-              <button onClick={() => void load()}>Retry</button>
+              <button onClick={() => void load(true)}>Retry</button>
             </div>
           )}
           <div className={`library-room ${current ? 'inspecting' : ''}`}>
@@ -573,7 +580,7 @@ export default function Shelf({
               )}
               <div className="library-scene-hint">
                 {current
-                  ? 'Drag to turn · pinch or scroll to zoom'
+                  ? 'Drag to rotate · right-drag to pan · pinch or scroll to zoom'
                   : 'Choose an object to explore its story.'}
               </div>
             </div>
@@ -588,35 +595,33 @@ export default function Shelf({
                   Return to shelf
                 </button>
                 <span className="library-kicker">{current.genre || 'FROM THE COLLECTION'}</span>
-                <h2>{current.title}</h2>
+                <h2>{current.title?.trim() || 'Unknown'}</h2>
                 <p className="library-author">
                   {objectType(current).label}
-                  {current.author ? ` · ${current.author}` : ''}
+                  {objectType(current).id === 'book'
+                    ? ` · ${current.author?.trim() || 'Unknown'}`
+                    : ''}
                 </p>
-                <p className="library-description">
-                  {current.description || 'An edition from the personal collection.'}
-                </p>
+                <p className="library-description">{current.description?.trim() || 'Unknown'}</p>
                 <dl>
-                  {objectType(current).fields.map((field) =>
-                    current.details?.[field.key] ? (
-                      <div className="collection-detail-field" key={field.key}>
-                        <dt>{field.label}</dt>
-                        <dd>
-                          {field.input === 'url' ? (
-                            <a href={current.details[field.key]} target="_blank" rel="noreferrer">
-                              Verify credential ↗
-                            </a>
-                          ) : (
-                            current.details[field.key]
-                          )}
-                        </dd>
-                      </div>
-                    ) : null,
-                  )}
-                  {current.year && (
+                  {objectType(current).fields.map((field) => (
+                    <div className="collection-detail-field" key={field.key}>
+                      <dt>{field.label}</dt>
+                      <dd>
+                        {field.input === 'url' && current.details?.[field.key] ? (
+                          <a href={current.details?.[field.key]} target="_blank" rel="noreferrer">
+                            Verify credential ↗
+                          </a>
+                        ) : (
+                          current.details?.[field.key]?.trim() || 'Unknown'
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                  {objectType(current).id !== 'certificate' && (
                     <>
                       <dt>Published</dt>
-                      <dd>{current.year}</dd>
+                      <dd>{current.year || 'Unknown'}</dd>
                     </>
                   )}
                   {current.isbn && (
@@ -626,7 +631,7 @@ export default function Shelf({
                     </>
                   )}
                   <dt>Shelf</dt>
-                  <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name}</dd>
+                  <dd>{data.shelves.find((s) => s.id === current.shelfId)?.name || 'Unknown'}</dd>
                 </dl>
                 {!artworkReady && !artworkError && (
                   <p role="status">Preparing object and artwork…</p>
@@ -685,14 +690,15 @@ export default function Shelf({
                   aria-pressed={selected === book.id}
                   onClick={() => inspect(book.id)}
                 >
-                  {book.objectType === 'model' && book.front ? (
+                  {book.front ? (
                     <CollectionThumbnail
                       id={book.front.id}
                       repository={repository}
                       color={book.color}
+                      fallback={<CollectionFormatIcon typeId={book.objectType} compact />}
                     />
                   ) : (
-                    <i style={{ background: book.color }} />
+                    <CollectionFormatIcon typeId={book.objectType} compact />
                   )}
                   <span>
                     {category === 'books' && book.bookNumber ? `${book.bookNumber} · ` : ''}

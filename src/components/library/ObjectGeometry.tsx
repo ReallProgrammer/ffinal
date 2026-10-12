@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 const Roughness = createContext(0.65);
 import * as THREE from 'three';
 import type { LibraryBook } from '../../lib/library/types';
@@ -91,37 +91,61 @@ function Certificate({ item: i, resources: r }: Props) {
     preset = framePreset(i);
   const f = p?.frame === false ? 0 : Math.min(p?.frameWidth || preset.width, Math.min(w, h) * 0.22),
     color = p?.frameColor || preset.color;
+  const frame = useMemo(() => {
+    if (!f) return null;
+    const shape = new THREE.Shape();
+    shape.moveTo(-w / 2, -h / 2);
+    shape.lineTo(w / 2, -h / 2);
+    shape.lineTo(w / 2, h / 2);
+    shape.lineTo(-w / 2, h / 2);
+    shape.closePath();
+    const opening = new THREE.Path();
+    opening.moveTo(-w / 2 + f, -h / 2 + f);
+    opening.lineTo(-w / 2 + f, h / 2 - f);
+    opening.lineTo(w / 2 - f, h / 2 - f);
+    opening.lineTo(w / 2 - f, -h / 2 + f);
+    opening.closePath();
+    shape.holes.push(opening);
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: d + 0.05,
+      bevelEnabled: false,
+      steps: 1,
+    });
+    geometry.translate(0, 0, -d / 2 - 0.017);
+    return geometry;
+  }, [w, h, d, f]);
+  useEffect(() => () => frame?.dispose(), [frame]);
   return (
     <>
-      <Box size={[w, h, d]} color={p?.backingColor || preset.backing} back={r.maps.back} />
+      <Box
+        size={[w - f * 2, h - f * 2, d]}
+        color={p?.backingColor || preset.backing}
+        back={r.maps.back}
+      />
       <Box
         size={[w - f * 2, h - f * 2, 0.01]}
         position={[0, 0, d / 2 + 0.007]}
         front={r.maps.front}
         color="#f4f1e9"
       />
+      {frame && (
+        <mesh geometry={frame} name="certificate-frame" castShadow receiveShadow>
+          <meshStandardMaterial
+            color={color}
+            metalness={preset.metalness}
+            roughness={preset.id === 'wood' ? 0.72 : 0.46}
+          />
+        </mesh>
+      )}
       {f > 0 &&
+        preset.id === 'academic' &&
         [-1, 1].map((side) => (
           <group key={side}>
-            <mesh position={[0, (side * (h - f)) / 2, 0.008]} castShadow>
-              <boxGeometry args={[w, f, d + 0.05]} />
-              <meshStandardMaterial
-                color={color}
-                metalness={preset.metalness}
-                roughness={preset.id === 'wood' ? 0.72 : 0.38}
-              />
-            </mesh>
-            <mesh position={[(side * (w - f)) / 2, 0, 0.008]} castShadow>
-              <boxGeometry args={[f, h, d + 0.05]} />
-              <meshStandardMaterial color={color} metalness={preset.metalness} roughness={0.38} />
-            </mesh>
-            {preset.id === 'academic' && (
-              <Box
-                size={[w - f * 2, 0.014, 0.014]}
-                position={[0, side * (h / 2 - f), d / 2 + 0.025]}
-                color="#c4aa62"
-              />
-            )}
+            <Box
+              size={[w - f * 2, 0.014, 0.014]}
+              position={[0, side * (h / 2 - f), d / 2 + 0.025]}
+              color="#c4aa62"
+            />
           </group>
         ))}
       {(p?.glass ?? preset.glass) && (

@@ -3,8 +3,8 @@ import presets from '../../../server/src/presets.json';
 import type { LibraryBook, AssetKind } from './types';
 export const objectTypes = registry;
 export const categories = [
-  { id: 'certificates', label: 'Certificates & Achievements' },
   { id: 'all', label: 'All Collections' },
+  { id: 'certificates', label: 'Certificates/Achievements' },
   { id: 'games', label: 'Games' },
   { id: 'media', label: 'Movies & Media' },
   { id: 'books', label: 'Books' },

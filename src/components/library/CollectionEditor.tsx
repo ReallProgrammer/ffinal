@@ -107,6 +107,7 @@ export default function CollectionEditor({
               Title
               <input
                 aria-label="Title"
+                placeholder="Unknown"
                 required
                 maxLength={180}
                 value={draft.title}
@@ -117,6 +118,7 @@ export default function CollectionEditor({
               <label>
                 Author
                 <input
+                  placeholder="Unknown"
                   value={draft.author}
                   onChange={(e) => setDraft({ ...draft, author: e.target.value })}
                 />
@@ -127,6 +129,7 @@ export default function CollectionEditor({
                 {field.label}
                 <input
                   type={field.input}
+                  placeholder="Unknown"
                   maxLength={field.key === 'notes' ? 3000 : 500}
                   value={draft.details?.[field.key] || ''}
                   onChange={(e) =>
@@ -142,6 +145,7 @@ export default function CollectionEditor({
               Description
               <textarea
                 maxLength={6000}
+                placeholder="Unknown"
                 value={draft.description}
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />

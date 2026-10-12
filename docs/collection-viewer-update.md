@@ -27,6 +27,8 @@ GLB/glTF no longer have fixed node, mesh, material, image, vertex or triangle co
 
 Measured from the cloud workspace before this change: the first live collection request took **24.4 seconds**, followed by a warm request taking **2.2 seconds**. These include proxy and network time, so they are not database-only timings. The current free Render service can sleep; it runs in Ohio, while the Supabase project is in Sydney.
 
+After the backend update, consecutive requests measured **2.69, 1.53 and 1.45 seconds**. The later warm samples are lower than the earlier 2.2-second warm sample; network and proxy variability still apply. Cold-start delays remain a hosting constraint.
+
 The list API now batches its independent reads into two dependent stages instead of six sequential database waits, and indexes asset/link lookups by ID. Required artwork surfaces load together, thumbnails reuse the same bounded source cache, and ordinary updates preserve the active scene and cached assets. Explicit refresh still clears failed resources. Initial metadata requests start without waiting for the Three.js import, and older overlapping responses cannot overwrite a newer list.
 
 Recommended order:
@@ -41,3 +43,5 @@ No new provider is required to complete the requested features. Changing region,
 ## Verification
 
 The real PostgreSQL/S3 integration suite covers owner-only bulk cleanup, associated and legacy genres, file conflicts and preserved referenced files. Delete-all tests run in an isolated database schema. Existing model, crop, upload, PDF, persistence and migration tests remain in place. Desktop/mobile browser checks exercise animated loading, near/far zoom limits, right-drag panning, category order, left shelf selection, matching buttons and popup-free cleanup against the actual local API.
+
+Verified release checks: the production TypeScript/Vite build passes; all 31 backend tests pass, including migration and isolated cleanup tests. The full desktop run passed 43 checks; its initial single-wheel zoom test was corrected to use repeated wheel events, and both affected viewer/cleanup tests passed on re-run. The full mobile run passed 38 checks with six intentional existing desktop-only skips. Extreme near/far zoom and horizontal right-drag were exercised for books, certificates and generic models.

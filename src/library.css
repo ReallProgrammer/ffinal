@@ -1860,3 +1860,96 @@
   overflow-wrap: anywhere;
   max-width: 100%;
 }
+
+/* The shelf chooser is anchored beside the left browsing arrow. */
+.library-scene-top {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 6px;
+}
+.library-scene-top > span {
+  margin-left: auto;
+}
+.library-scene-top select {
+  flex: 0 1 180px;
+  min-width: 0;
+}
+.library-management-tools {
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.library-management-tools .library-read-button {
+  border: 1px solid #3e5948;
+  border-radius: 0;
+  margin: 0;
+  min-height: 46px;
+}
+.collection-format-icon {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #4d6758;
+  gap: 6px;
+  width: 70px;
+  height: 68px;
+  flex: 0 0 auto;
+}
+.collection-format-icon > span {
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+.collection-format-icon.compact {
+  width: 30px;
+  height: 35px;
+}
+.library-index .collection-thumbnail {
+  width: 34px;
+  height: 40px;
+  object-fit: contain;
+}
+.collection-bulk-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.collection-bulk-tools label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.genre-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #d9dbce;
+  padding: 8px 0;
+}
+.genre-option > label,
+.genre-option > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 150px;
+  overflow-wrap: anywhere;
+}
+.library-orphans > div:not(.collection-bulk-tools) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  .library-scene-top > span {
+    display: none;
+  }
+  .library-scene-top select {
+    max-width: 160px;
+  }
+  .library-management-tools .library-read-button {
+    flex: 1 1 130px;
+  }
+}
