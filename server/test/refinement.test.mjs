@@ -85,7 +85,10 @@ test('wrap panels, interior textures, layers and genres persist with correct pub
     .toBuffer();
   const wrap = await up('wrap', source),
     disc = await up('disc', source),
-    decal = await up('decal', source);
+    decal = await up('decal', source),
+    photo = await up('gallery', source),
+    photo2 = await up('gallery', source);
+  assert.equal((await call('/assets/' + photo.id, 'GET', undefined, false)).status, 404);
   const split = await call('/admin/assets/' + wrap.id + '/split', 'POST', {
     panels: [
       { role: 'back', start: 0, end: 4 / 9 },
@@ -127,6 +130,7 @@ test('wrap panels, interior textures, layers and genres persist with correct pub
     spine: panels.spine.id,
     published: true,
     artwork: { wrap: wrap.id, disc: disc.id },
+    gallery: [photo.id, photo2.id],
     genreIds: [genre.id],
     tags: ['physical'],
     presentation: { casePreset: 'ps5', includeDisc: true, openAngle: 120 },
@@ -152,6 +156,11 @@ test('wrap panels, interior textures, layers and genres persist with correct pub
   const id = (await saved.json()).id;
   items.push(id);
   const object = (await list()).books.find((b) => b.id === id);
+  assert.deepEqual(
+    object.gallery.map((a) => a.id),
+    [photo.id, photo2.id],
+  );
+  assert.equal(object.artwork.gallery, undefined);
   assert.equal(object.artwork.disc.id, disc.id);
   assert.equal(object.layers.front[0].locked, true);
   assert.equal(object.presentation.openAngle, 120);
@@ -163,13 +172,41 @@ test('wrap panels, interior textures, layers and genres persist with correct pub
     200,
     'previous clients can echo asset descriptors',
   );
-  for (const asset of [disc, decal, panels.front])
+  for (const asset of [disc, decal, panels.front, photo, photo2])
     assert.equal((await call('/assets/' + asset.id, 'GET', undefined, false)).status, 200);
   assert.equal((await call('/assets/' + wrap.id, 'GET', undefined, false)).status, 404);
   assert.equal(
     (await call('/assets/' + decal.id + '?original=1', 'GET', undefined, false)).status,
     403,
   );
+  assert.equal(
+    (await call('/assets/' + photo.id + '?original=1', 'GET', undefined, false)).status,
+    403,
+  );
+  assert.equal(
+    (await call('/admin/items/' + id, 'PUT', { ...input, gallery: [decal.id] })).status,
+    400,
+  );
+  assert.equal(
+    (await call('/admin/items/' + id, 'PUT', { ...input, gallery: [photo2.id, photo.id] })).status,
+    200,
+  );
+  assert.deepEqual(
+    (await list()).books.find((b) => b.id === id).gallery.map((a) => a.id),
+    [photo2.id, photo.id],
+  );
+  assert.equal(
+    (await call('/admin/items/' + id, 'PUT', { ...input, gallery: [photo2, photo] })).status,
+    200,
+  );
+  const oldClient = { ...input };
+  delete oldClient.gallery;
+  assert.equal((await call('/admin/items/' + id, 'PUT', oldClient)).status, 200);
+  assert.deepEqual(
+    (await list()).books.find((b) => b.id === id).gallery.map((a) => a.id),
+    [photo2.id, photo.id],
+  );
+  assert.equal((await call('/admin/assets/' + photo.id, 'DELETE')).status, 409);
   const detail = await call(
     '/assets/' + panels.front.id + '?quality=detail',
     'GET',

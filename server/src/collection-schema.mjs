@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import types from './object-types.json' with { type: 'json' };
-import presets from './presets.json' with {type:'json'};
+import presets from './presets.json' with { type: 'json' };
 export { types };
 const uuid = z.string().uuid();
 const date = z
@@ -98,6 +98,11 @@ export const itemSchema = z
     back: uuid.nullable().default(null),
     digital: uuid.nullable().default(null),
     model: uuid.nullable().default(null),
+    gallery: z
+      .array(uuid)
+      .max(20)
+      .refine((ids) => new Set(ids).size === ids.length, 'Duplicate gallery image.')
+      .optional(),
     artwork: z.partialRecord(z.enum(artworkRoles), uuid.nullable()).default({}),
     layers: z
       .partialRecord(
@@ -125,7 +130,7 @@ export const itemSchema = z
         frameColor: color.optional(),
         backingColor: color.default('#eee9dd'),
         glass: z.boolean().default(false),
-        casePreset: z.enum(['',...presets.cases.map(p=>p.id)]).default(''),
+        casePreset: z.enum(['', ...presets.cases.map((p) => p.id)]).default(''),
         caseColor: color.optional(),
         plasticOpacity: z.number().min(0.12).max(1).default(0.88),
         plasticRoughness: z.number().min(0.08).max(0.8).default(0.18),

@@ -152,10 +152,15 @@ export function createApp({ db, s3, config }) {
               (l) =>
                 l.book_id === row.id &&
                 !l.role.startsWith('layer:') &&
+                !l.role.startsWith('gallery:') &&
                 (l.role !== 'manual' || admin || row.metadata.digitalAccess === 'public'),
             )
             .map((l) => [l.role, asset(l.role)]),
         ),
+        gallery: links
+          .filter((l) => l.role.startsWith('gallery:'))
+          .sort((a, b) => Number(a.role.slice(8)) - Number(b.role.slice(8)))
+          .map((l) => asset(l.role)),
         layerAssets: Object.fromEntries(
           links
             .filter((l) => l.book_id === row.id && l.role.startsWith('layer:'))
@@ -195,6 +200,7 @@ export function createApp({ db, s3, config }) {
           'insert',
           'wrap',
           'decal',
+          'gallery',
           'manual',
         ])
         .parse(req.body.kind);
@@ -476,6 +482,10 @@ export function createApp({ db, s3, config }) {
           value && typeof value === 'object' ? value.id : value,
         ]),
       );
+    if (Array.isArray(payload.gallery))
+      payload.gallery = payload.gallery.map((value) =>
+        value && typeof value === 'object' ? value.id : value,
+      );
     const input = bookSchema.parse(payload);
 
     const {
@@ -487,6 +497,7 @@ export function createApp({ db, s3, config }) {
       digital,
       model,
       artwork,
+      gallery,
       layers,
       genreIds,
       placement,
@@ -500,6 +511,19 @@ export function createApp({ db, s3, config }) {
       await client.query('BEGIN');
       await client.query('LOCK TABLE books IN EXCLUSIVE MODE');
       const references = { ...artwork };
+      const galleryIds =
+        gallery ??
+        (create
+          ? []
+          : (
+              await client.query(
+                "SELECT asset_id FROM book_assets WHERE book_id=$1 AND role LIKE 'gallery:%' ORDER BY substring(role FROM 9)::int",
+                [id],
+              )
+            ).rows.map((row) => row.asset_id));
+      galleryIds.forEach((id, index) => {
+        references[`gallery:${index}`] = id;
+      });
       for (const [surface, list] of Object.entries(layers))
         for (const layer of list)
           if (layer.type === 'image')
@@ -517,7 +541,7 @@ export function createApp({ db, s3, config }) {
           !(
             await client.query('SELECT 1 FROM assets WHERE id=$1 AND kind=$2 FOR KEY SHARE', [
               value,
-              kind.startsWith('layer:') ? 'decal' : kind,
+              kind.startsWith('layer:') ? 'decal' : kind.startsWith('gallery:') ? 'gallery' : kind,
             ])
           ).rowCount
         )

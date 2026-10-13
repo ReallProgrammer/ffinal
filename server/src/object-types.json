@@ -198,7 +198,7 @@
     "label": "PlayStation 5 game",
     "category": "games",
     "geometry": "case",
-    "dimensions": [1.8, 2.3, 0.22],
+    "dimensions": [2.15, 2.65, 0.22],
     "surfaces": ["front", "spine", "back"],
     "document": false,
     "fields": [
@@ -221,7 +221,7 @@
     "label": "Xbox game",
     "category": "games",
     "geometry": "case",
-    "dimensions": [1.8, 2.3, 0.24],
+    "dimensions": [2.15, 2.65, 0.22],
     "surfaces": ["front", "spine", "back"],
     "document": false,
     "fields": [
@@ -244,7 +244,7 @@
     "label": "PC game",
     "category": "games",
     "geometry": "case",
-    "dimensions": [2, 2.8, 0.4],
+    "dimensions": [2.15, 2.65, 0.22],
     "surfaces": ["front", "spine", "back"],
     "document": false,
     "fields": [

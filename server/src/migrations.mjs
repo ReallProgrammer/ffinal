@@ -54,6 +54,11 @@ export async function migrate(db) {
         INSERT INTO library_migrations(version) VALUES(4);
       `);
     }
+    if (!(await c.query('SELECT 1 FROM library_migrations WHERE version=5')).rowCount) {
+      await c.query(`ALTER TABLE assets DROP CONSTRAINT assets_kind_check;
+        ALTER TABLE assets ADD CONSTRAINT assets_kind_check CHECK(kind IN ('front','spine','back','digital','model','disc','interior','booklet','card','insert','wrap','decal','manual','gallery'));
+        INSERT INTO library_migrations(version) VALUES(5);`);
+    }
     // The API's table-owning DB role remains functional. Untrusted Data API roles get no policies.
     for (const table of ['books', 'assets', 'shelves', 'sessions', 'library_migrations'])
       await c.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
