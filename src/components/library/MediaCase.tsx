@@ -104,7 +104,7 @@ export default function MediaCase({
   const color = p?.caseColor || preset.color,
     opacity = p?.plasticOpacity ?? preset.opacity,
     roughness = p?.plasticRoughness ?? preset.roughness;
-  const game = ['pc', 'ps5', 'xbox'].includes(item.objectType || '');
+  const game = preset.shape === 'keep';
   const plastic = { color, opacity, roughness, plastic: true },
     wall = Math.min(0.024, d * 0.15),
     cover = useRef<THREE.Group>(null);
@@ -121,9 +121,8 @@ export default function MediaCase({
       state.invalidate();
     }
   });
-  const band = game ? 0 : preset.band;
-  const iw = w - 0.09,
-    ih = h - band - 0.075,
+  const iw = w,
+    ih = h,
     discRadius = Math.min(w * 0.43, h * 0.38),
     z = -d / 2 + wall * 2;
   const insert = (role: 'booklet' | 'card' | 'insert', pos: V, size: V) =>
@@ -143,7 +142,7 @@ export default function MediaCase({
       {resources.maps.back && (
         <Panel
           size={[iw, ih, 0.008]}
-          position={[0, -band / 2, -d / 2 - 0.012]}
+          position={[0, 0, -d / 2 - 0.012]}
           back={resources.maps.back}
           color={color}
         />
@@ -214,33 +213,6 @@ export default function MediaCase({
           </>
         )}
       </group>
-      {[-1, 1].map((n) => (
-        <group key={n}>
-          {!game && (
-            <mesh
-              position={bottom ? [n * w * 0.35, -h / 2, 0] : [-w / 2, n * h * 0.36, 0]}
-              rotation={bottom ? [0, 0, Math.PI / 2] : [0, 0, 0]}
-            >
-              <cylinderGeometry args={[d * 0.24, d * 0.24, Math.min(0.18, h * 0.1), 16]} />
-              <meshPhysicalMaterial color={color} roughness={roughness} clearcoat={0.6} />
-            </mesh>
-          )}
-          {!game && (
-            <Panel
-              size={[0.05, 0.1, d * 0.45]}
-              position={[w / 2 - wall, n * h * 0.26, d * 0.2]}
-              {...plastic}
-            />
-          )}
-          {!game && (
-            <Panel
-              size={[0.07, 0.025, wall]}
-              position={[w / 2 - 0.025, n * h * 0.26, d * 0.42]}
-              {...plastic}
-            />
-          )}
-        </group>
-      ))}
       {game && (
         <group>
           <Panel
@@ -262,7 +234,7 @@ export default function MediaCase({
           {(resources.maps.front || resources.maps.interior) && (
             <Panel
               size={[iw, ih, 0.008]}
-              position={[0, -band / 2, 0.014]}
+              position={[0, 0, 0.014]}
               front={resources.maps.front}
               back={resources.maps.interior}
               color={color}

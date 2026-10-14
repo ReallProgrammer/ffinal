@@ -198,7 +198,7 @@
     "label": "PlayStation 5 game",
     "category": "games",
     "geometry": "case",
-    "dimensions": [2.15, 2.65, 0.22],
+    "dimensions": [1.795, 2.551, 0.189],
     "surfaces": ["front", "spine", "back"],
     "document": false,
     "fields": [

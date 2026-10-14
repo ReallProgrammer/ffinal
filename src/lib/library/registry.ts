@@ -20,21 +20,36 @@ export function surfaceRatio(item: LibraryBook, surface: AssetKind) {
   if (surface === 'booklet' || surface === 'card' || surface === 'insert')
     return surface === 'card' ? 1.6 : item.width / item.height;
   const geometry = objectType(item).geometry;
-  if (geometry === 'case' && surface !== 'spine') {
-    const preset = presets.cases.find(
-      (p) => p.id === (item.presentation?.casePreset || objectType(item).casePreset),
+  if (
+    geometry === 'certificate' &&
+    ['front', 'back'].includes(surface) &&
+    item.presentation?.frame !== false
+  ) {
+    const frame =
+      presets.frames.find((p) => p.id === item.presentation?.frameStyle) ||
+      presets.frames.find((p) => p.id === 'gold')!;
+    const border = Math.min(
+      item.presentation?.frameWidth || frame.width,
+      Math.min(item.width, item.height) * 0.22,
     );
-    const band = ['pc', 'ps5', 'xbox'].includes(item.objectType || '') ? 0 : preset?.band || 0.035;
-    return (item.width - 0.09) / (item.height - band - 0.075);
-  }
-  if (geometry === 'certificate' && surface === 'front' && item.presentation?.frame !== false) {
-    const border = item.presentation?.frameWidth || 0.075;
     return (item.width - border * 2) / (item.height - border * 2);
   }
   if (geometry === 'tape' && surface === 'front') return (item.width * 0.3) / (item.height * 0.36);
-  return (surface === 'spine' ? item.thickness : item.width) / item.height;
+  return (
+    (surface === 'spine' ? item.thickness + (geometry === 'book' ? 0.035 : 0) : item.width) /
+    item.height
+  );
 }
 export function surfaceSize(item: LibraryBook, surface: AssetKind) {
+  const preset = presets.cases.find(
+    (p) => p.id === (item.presentation?.casePreset || objectType(item).casePreset),
+  );
+  if (objectType(item).geometry === 'case' && preset) {
+    const pixels = surface === 'spine' ? preset.spinePixels : preset.artworkPixels;
+    // Custom dimensions use their actual surface ratio, not the preset's recommendation.
+    const ratio = surfaceRatio(item, surface);
+    if (pixels && Math.abs(ratio - pixels[0] / pixels[1]) < 0.0001) return pixels;
+  }
   const r = surfaceRatio(item, surface);
   return [Math.round(Math.min(3072, 3072 * r)), Math.round(Math.min(3072, 3072 / r))];
 }

@@ -437,7 +437,14 @@ export default function Shelf({
           </header>
           <nav className="collection-categories" aria-label="Collection categories">
             {availableCategories.map((c) => (
-              <button key={c.id} aria-pressed={category === c.id} onClick={() => setCategory(c.id)}>
+              <button
+                key={c.id}
+                aria-pressed={category === c.id}
+                onClick={() => {
+                  returnToShelf();
+                  setCategory(c.id);
+                }}
+              >
                 {c.label}
               </button>
             ))}
@@ -682,27 +689,29 @@ export default function Shelf({
                   </p>
                 )}
 
-                {objectType(current).geometry === 'case' && (
-                  <button className="xp-button" onClick={() => setCaseOpen((v) => !v)}>
-                    {caseOpen ? 'Close case' : 'Open case'}
-                  </button>
-                )}
-                {(current.gallery?.length ||
-                  current.front ||
-                  current.back ||
-                  Object.values(current.artwork || {}).some((asset) =>
-                    asset?.mime.startsWith('image/'),
-                  )) && (
-                  <button
-                    className="xp-button"
-                    onClick={() => {
-                      setArtworkIndex(0);
-                      setArtwork(current);
-                    }}
-                  >
-                    View flat artwork
-                  </button>
-                )}
+                <div className="collection-detail-actions">
+                  {objectType(current).geometry === 'case' && (
+                    <button className="xp-button" onClick={() => setCaseOpen((v) => !v)}>
+                      {caseOpen ? 'Close case' : 'Open case'}
+                    </button>
+                  )}
+                  {(current.gallery?.length ||
+                    current.front ||
+                    current.back ||
+                    Object.values(current.artwork || {}).some((asset) =>
+                      asset?.mime.startsWith('image/'),
+                    )) && (
+                    <button
+                      className="xp-button"
+                      onClick={() => {
+                        setArtworkIndex(0);
+                        setArtwork(current);
+                      }}
+                    >
+                      View flat artwork
+                    </button>
+                  )}
+                </div>
                 {!!current.gallery?.length && (
                   <div className="collection-photo-strip" aria-label="Collection photos">
                     {current.gallery.map((asset, index) => (

@@ -18,6 +18,7 @@ export default function AppearanceControls({
           <label>
             Case preset
             <select
+              aria-label="Case preset"
               value={p.casePreset || type.casePreset}
               onChange={(e) => {
                 const preset = casePresets.find((v) => v.id === e.target.value)!;

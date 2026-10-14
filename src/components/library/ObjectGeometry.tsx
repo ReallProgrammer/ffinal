@@ -178,32 +178,18 @@ function Case({ item: i, resources: r }: Props) {
         vhs: '#242224',
       } as Record<string, string>
     )[i.objectType || ''] || i.color;
-  const top = ['ps5', 'xbox', 'bluray'].includes(i.objectType || '') ? 0.13 : 0.025;
   return (
-    <>
-      <Box size={[w, h, d]} color={c} spine={r.maps.spine} roughness={0.3} />
-      <Box
-        size={[w - 0.06, h - top - 0.05, 0.006]}
-        position={[0, -top / 2, d / 2 + 0.003]}
-        color={c}
-        front={r.maps.front}
-        roughness={i.presentation?.roughness}
-      />
-      <Box
-        size={[w - 0.06, h - top - 0.05, 0.006]}
-        position={[0, -top / 2, -d / 2 - 0.003]}
-        color={c}
-        back={r.maps.back}
-      />
-      <Box
-        size={[w - 0.08, top * 0.6, 0.01]}
-        position={[0, h / 2 - top / 2, d / 2]}
-        color={i.objectType === 'ps5' ? '#e5e8ed' : c}
-      />
-      <Box size={[0.022, h - 0.06, 0.035]} position={[w / 2 - 0.025, 0, d / 2]} color={c} />
-    </>
+    <Box
+      size={[w, h, d]}
+      color={c}
+      front={r.maps.front}
+      back={r.maps.back}
+      spine={r.maps.spine}
+      roughness={i.presentation?.roughness ?? 0.3}
+    />
   );
 }
+
 function Cassette({ item: i, resources: r }: Props) {
   const { width: w, height: h, thickness: d } = i;
   return (

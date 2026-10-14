@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AssetKind, BookAsset, LibraryBook, LibraryRepository } from '../../lib/library/types';
+import type {
+  AssetKind,
+  BookAsset,
+  Crop,
+  LibraryBook,
+  LibraryRepository,
+} from '../../lib/library/types';
 import { artworkAsset } from '../../lib/library/types';
 import { ImagePlus, FileUp } from 'lucide-react';
 import CollectionThumbnail from './CollectionThumbnail';
@@ -26,6 +32,20 @@ export default function UploadField({
   const asset = artworkAsset(item, kind),
     image = !['model', 'digital', 'manual'].includes(kind),
     size = surfaceSize(item, kind);
+  const [pending, setPending] = useState<{
+    file: File;
+    url: string;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [focal, setFocal] = useState({ x: 0.5, y: 0.5 });
+  useEffect(
+    () => () => {
+      if (pending) URL.revokeObjectURL(pending.url);
+    },
+    [pending],
+  );
   const [status, setStatus] = useState(''),
     [progress, setProgress] = useState<number | null>(null),
     [error, setError] = useState(''),
@@ -40,8 +60,44 @@ export default function UploadField({
       controller.current?.abort();
     };
   }, []);
-  async function upload(file: File) {
-    if (controller.current || disabled) return;
+  async function choose(file: File) {
+    if (controller.current || disabled || pending) return;
+    setError('');
+    if (image && !['wrap', 'decal', 'gallery'].includes(kind)) {
+      // Decode locally before any upload. Near matches (within 10%) resize directly.
+      if (file.size > 10 * 1024 * 1024) {
+        setError('Images must be no larger than 10 MB.');
+        return;
+      }
+      onBusy(true);
+      try {
+        const bitmap = await createImageBitmap(file);
+        const { width, height } = bitmap;
+        bitmap.close();
+        if (!mounted.current) return;
+        const relative = width / height / surfaceRatio(item, kind);
+        if (Math.max(relative, 1 / relative) > 1.1) {
+          setPending({ file, url: URL.createObjectURL(file), width, height });
+          setAdjusting(false);
+          setFocal({ x: 0.5, y: 0.5 });
+          return;
+        }
+      } catch {
+        if (mounted.current) {
+          setError('This image could not be read. Choose a PNG, JPEG or WebP image.');
+          onBusy(false);
+        }
+        return;
+      }
+    }
+    await upload(file);
+  }
+  function cancelReview() {
+    setPending(null);
+    onBusy(false);
+  }
+  async function upload(file: File, crop?: Crop) {
+    if (controller.current) return;
     retry.current = file;
     const operation = new AbortController();
     controller.current = operation;
@@ -51,7 +107,7 @@ export default function UploadField({
     setProgress(0);
     onBusy(true);
     try {
-      const uploaded = await repository.upload(
+      let uploaded = await repository.upload(
         file,
         kind,
         (p) => {
@@ -63,6 +119,11 @@ export default function UploadField({
         operation.signal,
       );
       if (operation.signal.aborted) throw new Error('Upload cancelled.');
+      if (crop) {
+        setStatus('Preparing cropped texture…');
+        uploaded = await repository.crop(uploaded.id, crop);
+        if (operation.signal.aborted) throw new Error('Upload cancelled.');
+      }
       if (mounted.current) {
         await onChange(uploaded);
         setStatus('Ready');
@@ -88,7 +149,7 @@ export default function UploadField({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (e.dataTransfer.files[0]) void upload(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files[0]) void choose(e.dataTransfer.files[0]);
       }}
     >
       <strong>
@@ -120,7 +181,7 @@ export default function UploadField({
         <input
           type="file"
           aria-label={`Upload ${label || kind}`}
-          disabled={disabled || Boolean(controller.current)}
+          disabled={disabled || Boolean(controller.current) || Boolean(pending)}
           accept={
             image
               ? 'image/png,image/jpeg,image/webp'
@@ -129,11 +190,91 @@ export default function UploadField({
                 : '.pdf,.epub'
           }
           onChange={(e) => {
-            if (e.target.files?.[0]) void upload(e.target.files[0]);
+            if (e.target.files?.[0]) void choose(e.target.files[0]);
             e.target.value = '';
           }}
         />
       </label>
+      {pending && (
+        <section
+          className="artwork-ratio-review"
+          role="dialog"
+          aria-label="Review artwork proportions"
+        >
+          <strong>This image has different proportions.</strong>
+          <p>
+            {pending.width} × {pending.height} px supplied; this surface needs{' '}
+            {surfaceRatio(item, kind).toFixed(3)}:1 ({size[0]} × {size[1]} px recommended).
+          </p>
+          <p>
+            {adjusting
+              ? 'Reposition the crop below. The original file will also be kept.'
+              : 'Revise the image before uploading, crop it to fit, or upload the entire image stretched to the cover. Stretching a very different ratio can distort the artwork.'}
+          </p>
+          {adjusting && (
+            <>
+              <div
+                className="artwork-ratio-preview"
+                style={{
+                  aspectRatio: surfaceRatio(item, kind),
+                  width: Math.min(280, 280 * surfaceRatio(item, kind)),
+                }}
+              >
+                <img
+                  src={pending.url}
+                  alt="Artwork crop before upload"
+                  style={{ objectPosition: `${focal.x * 100}% ${focal.y * 100}%` }}
+                />
+              </div>
+              {(['x', 'y'] as const).map((axis) => (
+                <label key={axis}>
+                  {axis === 'x' ? 'Horizontal crop position' : 'Vertical crop position'}
+                  <input
+                    aria-label={
+                      axis === 'x' ? 'Horizontal crop position' : 'Vertical crop position'
+                    }
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={focal[axis]}
+                    onChange={(e) => setFocal({ ...focal, [axis]: Number(e.target.value) })}
+                  />
+                </label>
+              ))}
+            </>
+          )}
+          <div className="artwork-ratio-actions">
+            <button type="button" onClick={cancelReview}>
+              Revise image / cancel upload
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!adjusting) {
+                  setAdjusting(true);
+                  return;
+                }
+                const file = pending.file;
+                setPending(null);
+                void upload(file, { ...focal, zoom: 1, ratio: surfaceRatio(item, kind) });
+              }}
+            >
+              {adjusting ? 'Upload with this crop' : 'Adjust crop before upload'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const file = pending.file;
+                setPending(null);
+                void upload(file);
+              }}
+            >
+              Upload anyway — stretch to fit
+            </button>
+          </div>
+        </section>
+      )}
       <small>{filename || asset?.filename || 'No file uploaded'}</small>
       {status && (
         <div role="status">
@@ -149,7 +290,7 @@ export default function UploadField({
       {error && (
         <div role="alert">
           {error}
-          <button type="button" onClick={() => retry.current && void upload(retry.current)}>
+          <button type="button" onClick={() => retry.current && void choose(retry.current)}>
             Retry upload
           </button>
         </div>

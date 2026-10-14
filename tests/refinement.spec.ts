@@ -76,6 +76,100 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page.getByRole('button', { name: 'Delete layer', exact: true }).click();
     await page.getByLabel('Title', { exact: true }).fill(name);
     await page.getByLabel('Shelf', { exact: true }).selectOption(shelf);
+    // Proportions are checked locally before creating a private upload.
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('1795 × 2551');
+    await page.getByLabel('Case preset', { exact: true }).selectOption('ps3');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('1748 × 2150');
+    await page.getByLabel('Case preset', { exact: true }).selectOption('ps4');
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('1795 × 2551');
+    const sharp = (await import('../server/node_modules/sharp/lib/index.js')).default;
+    const near = await sharp({
+      create: { width: 359, height: 510, channels: 3, background: '#ed2135' },
+    })
+      .png()
+      .toBuffer();
+    const nearUpload = page.waitForResponse(
+      (r) => r.url() === base + '/admin/uploads' && r.request().method() === 'POST',
+    );
+    await page
+      .getByLabel('Upload front', { exact: true })
+      .setInputFiles({ name: 'near-ratio.png', mimeType: 'image/png', buffer: near });
+    assetIds.push((await (await nearUpload).json()).id);
+    await expect(page.locator('.library-upload[data-kind=front]')).toContainText('Ready');
+    await expect(page.getByRole('dialog', { name: 'Review artwork proportions' })).toHaveCount(0);
+    await expect(page.locator('.book-preview')).toHaveAttribute('data-textures-ready', 'true');
+    const physical = await page.evaluate(async () => {
+      // Inspect the actual rendered geometry and GPU texture source, not an HTML mock.
+      const { _roots } = await import('/node_modules/.vite/deps/@react-three_fiber.js');
+      const canvas = document.querySelector('.book-preview canvas');
+      const scene = _roots.get(canvas).store.getState().scene;
+      const surfaces: any[] = [],
+        hinges: any[] = [];
+      scene.traverse((mesh: any) => {
+        if (mesh.geometry?.type === 'CylinderGeometry' && Math.abs(mesh.position.x) > 0.5)
+          hinges.push(mesh.position.x);
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          const image = material?.map?.image;
+          if (!(image instanceof HTMLCanvasElement)) continue;
+          const ctx = image.getContext('2d')!;
+          surfaces.push({
+            size: mesh.geometry.parameters,
+            corners: [
+              [0, 0],
+              [image.width - 1, 0],
+              [0, image.height - 1],
+              [image.width - 1, image.height - 1],
+            ].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data]),
+          });
+        }
+      });
+      return { surfaces, hinges };
+    });
+    expect(physical.hinges).toEqual([]);
+    expect(physical.surfaces.length).toBeGreaterThan(0);
+    for (const surface of physical.surfaces) {
+      expect(surface.size.width).toBeCloseTo(1.795);
+      expect(surface.size.height).toBeCloseTo(2.551);
+      for (const [r, g, b, a] of surface.corners) {
+        expect(r).toBeGreaterThan(220);
+        expect(g).toBeLessThan(50);
+        expect(b).toBeLessThan(70);
+        expect(a).toBe(255);
+      }
+    }
+    await page
+      .locator('.book-preview')
+      .screenshot({ path: `/workspace/artifacts/cover-fit-${info.project.name}.png` });
+    await page.getByRole('tab', { name: /^spine/ }).click();
+    await expect(page.locator('.library-upload[data-kind=spine]')).toContainText('189 × 2551');
+    let uploadRequests = 0;
+    const countUpload = (r: any) => {
+      if (r.url() === base + '/admin/uploads' && r.method() === 'POST') uploadRequests++;
+    };
+    page.on('request', countUpload);
+    await page
+      .getByLabel('Upload spine', { exact: true })
+      .setInputFiles('/tmp/library-fixtures/cover.png');
+    await expect(page.getByRole('dialog', { name: 'Review artwork proportions' })).toBeVisible();
+    expect(uploadRequests).toBe(0);
+    await page.getByRole('button', { name: 'Revise image / cancel upload', exact: true }).click();
+    await expect(page.getByLabel('Upload spine', { exact: true })).toBeEnabled();
+    expect(uploadRequests).toBe(0);
+    await page
+      .getByLabel('Upload spine', { exact: true })
+      .setInputFiles('/tmp/library-fixtures/cover.png');
+    await page.getByRole('button', { name: 'Adjust crop before upload', exact: true }).click();
+    await expect(page.getByAltText('Artwork crop before upload')).toBeVisible();
+    expect(uploadRequests).toBe(0);
+    const croppedUpload = page.waitForResponse(
+      (r) => r.url().includes('/crop') && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Upload with this crop', exact: true }).click();
+    assetIds.push((await (await croppedUpload).json()).id);
+    await expect(page.locator('.library-upload[data-kind=spine]')).toContainText('Ready');
+    expect(uploadRequests).toBe(1);
+    page.off('request', countUpload);
+    await page.getByLabel('Case preset', { exact: true }).selectOption('ps5');
     await page.getByRole('tab', { name: /Full wrap/ }).click();
     await page
       .getByLabel('Upload full wrap', { exact: true })
@@ -87,6 +181,7 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page
       .getByLabel('Upload disc', { exact: true })
       .setInputFiles('/tmp/library-fixtures/revised.png');
+    await page.getByRole('button', { name: 'Upload anyway — stretch to fit', exact: true }).click();
     await expect(
       page
         .locator('.library-upload')
@@ -243,6 +338,18 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       'true',
       { timeout: 30000 },
     );
+    const openBounds = (await page
+      .getByRole('button', { name: 'Open case', exact: true })
+      .boundingBox())!;
+    const flatBounds = (await page
+      .getByRole('button', { name: 'View flat artwork', exact: true })
+      .boundingBox())!;
+    expect(
+      Math.max(
+        flatBounds.x - openBounds.x - openBounds.width,
+        flatBounds.y - openBounds.y - openBounds.height,
+      ),
+    ).toBeGreaterThanOrEqual(10);
     await page.getByRole('button', { name: 'Open case', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Close case', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Close case', exact: true }).click();
@@ -259,15 +366,34 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.4);
     await page.mouse.wheel(0, -500);
     await expect(page.locator('.artwork-viewer .zoom-tools')).not.toContainText('100%');
+    const previous = (await page.getByLabel('Previous artwork', { exact: true }).boundingBox())!;
+    const next = (await page.getByLabel('Next artwork', { exact: true }).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(previous.x + previous.width);
+    expect(box.x + box.width).toBeLessThanOrEqual(next.x);
+    await expect(zoom).toHaveCSS('overflow', 'hidden');
+    await page
+      .locator('.artwork-gallery-stage')
+      .screenshot({ path: `/workspace/artifacts/gallery-bounds-${info.project.name}.png` });
     await page.getByRole('button', { name: 'Reset zoom', exact: true }).click();
     await expect(page.locator('.artwork-viewer .zoom-tools')).toContainText('100%');
     await page.getByRole('button', { name: 'Close artwork', exact: true }).click();
     await page.getByRole('button', { name: 'Read manual', exact: true }).click();
     await expect(page.locator('.pdf-reader')).toBeVisible();
-    await page.getByRole('button', { name: 'Open document cover', exact: true }).click();
+    await expect(page.locator('.pdf-book')).toHaveCount(0);
     await expect(page.getByRole('img', { name: 'Document page 1', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Document page 2', exact: true })).toBeVisible();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('img', { name: 'Document page 3', exact: true })).toBeVisible();
+    await page
+      .locator('.pdf-document')
+      .screenshot({ path: `/workspace/artifacts/manual-flat-${info.project.name}.png` });
     await page.getByRole('button', { name: 'Close reader', exact: true }).click();
-    await page.getByRole('button', { name: 'Return to shelf', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Collection categories' })
+      .getByRole('button', { name: 'Games', exact: true })
+      .click();
+    await expect(page.locator('.library-book-details')).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
     if (id) await context.request.delete(base + '/admin/items/' + id, { headers });

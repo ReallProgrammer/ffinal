@@ -181,14 +181,9 @@ async function load(
           const blob = await sourceBlob(repository, asset.id, detail ? 'detail' : 'overview');
           const bitmap = await createImageBitmap(blob);
           try {
-            const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
-            ctx.drawImage(
-              bitmap,
-              (canvas.width - bitmap.width * scale) / 2,
-              (canvas.height - bitmap.height * scale) / 2,
-              bitmap.width * scale,
-              bitmap.height * scale,
-            );
+            // The upload gate handles mismatched ratios. The entire approved image
+            // maps edge-to-edge; no second crop or colored letterboxing is applied.
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
           } finally {
             bitmap.close();
           }

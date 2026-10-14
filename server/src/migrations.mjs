@@ -59,6 +59,19 @@ export async function migrate(db) {
         ALTER TABLE assets ADD CONSTRAINT assets_kind_check CHECK(kind IN ('front','spine','back','digital','model','disc','interior','booklet','card','insert','wrap','decal','manual','gallery'));
         INSERT INTO library_migrations(version) VALUES(5);`);
     }
+    if (!(await c.query('SELECT 1 FROM library_migrations WHERE version=6')).rowCount) {
+      // Correct only the former shared PlayStation default. Explicit custom sizes survive.
+      await c.query(`UPDATE books SET metadata = metadata ||
+        CASE WHEN metadata #>> '{presentation,casePreset}' = 'ps3'
+          THEN '{"width":1.748,"height":2.15,"thickness":0.22}'::jsonb
+          ELSE '{"width":1.795,"height":2.551,"thickness":0.189}'::jsonb END,
+        updated_at = now()
+        WHERE metadata->>'width' = '2.15' AND metadata->>'height' = '2.65'
+          AND metadata->>'thickness' = '0.22'
+          AND (metadata #>> '{presentation,casePreset}' IN ('ps3','ps4','ps5')
+            OR (metadata->>'objectType' = 'ps5' AND NULLIF(metadata #>> '{presentation,casePreset}', '') IS NULL));
+        INSERT INTO library_migrations(version) VALUES(6);`);
+    }
     // The API's table-owning DB role remains functional. Untrusted Data API roles get no policies.
     for (const table of ['books', 'assets', 'shelves', 'sessions', 'library_migrations'])
       await c.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);

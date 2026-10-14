@@ -4,7 +4,15 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 GlobalWorkerOptions.workerSrc = workerUrl;
-function PageImage({ page, load }: { page: number; load: (n: number) => Promise<string> }) {
+function PageImage({
+  page,
+  load,
+  onAspect,
+}: {
+  page: number;
+  load: (n: number) => Promise<string>;
+  onAspect?: (ratio: number) => void;
+}) {
   const [src, setSrc] = useState(''),
     [error, setError] = useState('');
   useEffect(() => {
@@ -23,7 +31,12 @@ function PageImage({ page, load }: { page: number; load: (n: number) => Promise<
     };
   }, [page, load]);
   return src ? (
-    <img draggable={false} src={src} alt={`Document page ${page}`} />
+    <img
+      draggable={false}
+      src={src}
+      alt={`Document page ${page}`}
+      onLoad={(e) => onAspect?.(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+    />
   ) : (
     <span role={error ? 'alert' : 'status'}>{error || 'Rendering page…'}</span>
   );
@@ -33,11 +46,13 @@ export default function PdfReader({
   title,
   coverUrl,
   active = true,
+  flat = false,
 }: {
   url: string;
   title: string;
   coverUrl?: string;
   active?: boolean;
+  flat?: boolean;
 }) {
   const [document, setDocument] = useState<PDFDocumentProxy>(),
     [error, setError] = useState(''),
@@ -46,7 +61,7 @@ export default function PdfReader({
     [zoom, setZoom] = useState(1),
     [rtl, setRtl] = useState(false),
     [outline, setOutline] = useState<{ title: string; page: number }[]>([]),
-    [cover, setCover] = useState(Boolean(coverUrl));
+    [cover, setCover] = useState(!flat && Boolean(coverUrl));
   const cache = useRef(new Map<number, Promise<string>>()),
     urls = useRef(new Map<number, string>()),
     root = useRef<HTMLDivElement>(null),
@@ -126,7 +141,7 @@ export default function PdfReader({
           try {
             p = await document.getPage(n);
             const original = p.getViewport({ scale: 1 });
-            if (n === 1) setAspect(original.width / original.height);
+            if (n === 1 && !flat) setAspect(original.width / original.height);
             const viewport = p.getViewport({
               scale: Math.min(4, 2400 / original.width, 3200 / original.height),
             });
@@ -155,7 +170,7 @@ export default function PdfReader({
       }
       return pending;
     },
-    [document],
+    [document, flat],
   );
   useEffect(() => {
     if (!document) return;
@@ -178,9 +193,14 @@ export default function PdfReader({
         setCover(false);
         return;
       }
-      const to = page + direction * 2;
+      const to = page + direction * (flat ? 1 : 2);
       if (to < 1 || to > document.numPages) return;
       try {
+        if (flat) {
+          await load(to);
+          setPage(to);
+          return;
+        }
         await Promise.all([
           load(to),
           to + 1 <= document.numPages ? load(to + 1) : Promise.resolve(''),
@@ -197,7 +217,7 @@ export default function PdfReader({
         setError((e as Error).message);
       }
     },
-    [document, turn, cover, page, load, reduced],
+    [document, turn, cover, page, load, reduced, flat],
   );
   useEffect(() => {
     if (!active) return;
@@ -218,23 +238,27 @@ export default function PdfReader({
       : [turn.to, turn.from + 1]
     : [page, page + 1];
   return (
-    <div className="pdf-reader" ref={root}>
+    <div className={`pdf-reader ${flat ? 'pdf-document' : ''}`} ref={root}>
       <nav>
         <button disabled={(page === 1 && !cover) || Boolean(turn)} onClick={() => void go(-1)}>
-          Previous pages
+          {flat ? 'Previous page' : 'Previous pages'}
         </button>
         <span aria-live="polite">
           {document
             ? cover
               ? 'Cover'
-              : `Pages ${page}–${Math.min(page + 1, document.numPages)} of ${document.numPages}`
+              : flat
+                ? `Page ${page} of ${document.numPages}`
+                : `Pages ${page}–${Math.min(page + 1, document.numPages)} of ${document.numPages}`
             : 'Loading PDF…'}
         </span>
         <button
-          disabled={!document || Boolean(turn) || (!cover && page + 2 > document.numPages)}
+          disabled={
+            !document || Boolean(turn) || (!cover && page + (flat ? 1 : 2) > document.numPages)
+          }
           onClick={() => void go(1)}
         >
-          {cover ? 'Open book' : 'Next pages'}
+          {cover ? 'Open book' : flat ? 'Next page' : 'Next pages'}
         </button>
         <label>
           Zoom
@@ -259,16 +283,22 @@ export default function PdfReader({
         >
           Fullscreen
         </button>
-        <label>
-          <input type="checkbox" checked={rtl} onChange={(e) => setRtl(e.target.checked)} />
-          Right-to-left
-        </label>
+        {!flat && (
+          <label>
+            <input type="checkbox" checked={rtl} onChange={(e) => setRtl(e.target.checked)} />
+            Right-to-left
+          </label>
+        )}
         {outline.length > 0 && (
           <select
             aria-label="Table of contents"
             onChange={(e) => {
               setCover(false);
-              setPage(Math.max(1, Math.floor((Number(e.target.value) - 1) / 2) * 2 + 1));
+              setPage(
+                flat
+                  ? Number(e.target.value)
+                  : Math.max(1, Math.floor((Number(e.target.value) - 1) / 2) * 2 + 1),
+              );
             }}
           >
             <option value="1">Contents</option>
@@ -279,83 +309,102 @@ export default function PdfReader({
             ))}
           </select>
         )}
-        {coverUrl && !cover && <button onClick={() => setCover(true)}>View cover</button>}
+        {!flat && coverUrl && !cover && <button onClick={() => setCover(true)}>View cover</button>}
       </nav>
       {error && <p role="alert">{error}</p>}
       <div className="pdf-stage" ref={stage}>
-        <ZoomSurface label="Zoomable document">
-          <div
-            className={`pdf-book ${rtl ? 'rtl' : ''}`}
-            style={
-              {
-                '--page-ratio': aspect,
-                width:
-                  Math.max(
-                    160,
-                    Math.min(900, stageSize.width * 0.92, (stageSize.height - 24) * aspect * 2),
-                  ) * zoom,
-              } as React.CSSProperties
-            }
-          >
-            {cover && coverUrl ? (
-              <button
-                className="pdf-cover"
-                onClick={() => setCover(false)}
-                aria-label="Open document cover"
+        <ZoomSurface key={flat ? page : 'book'} label="Zoomable document">
+          {flat ? (
+            document && (
+              <div
+                className="pdf-document-page"
+                style={{
+                  width:
+                    Math.max(
+                      120,
+                      Math.min(stageSize.width * 0.94, (stageSize.height - 24) * aspect),
+                    ) * zoom,
+                }}
               >
-                <img src={coverUrl} alt={`${title} cover`} />
-              </button>
-            ) : (
-              document && (
-                <>
-                  <div className="pdf-spread">
-                    {displayed.map((n, index) => (
-                      <button
-                        key={index}
-                        className="pdf-paper"
-                        aria-label={index === 0 ? 'Turn previous page' : 'Turn next page'}
-                        onClick={() => void go(index === 0 ? -1 : 1)}
+                <PageImage page={page} load={load} onAspect={setAspect} />
+              </div>
+            )
+          ) : (
+            <div
+              className={`pdf-book ${rtl ? 'rtl' : ''}`}
+              style={
+                {
+                  '--page-ratio': aspect,
+                  width:
+                    Math.max(
+                      160,
+                      Math.min(900, stageSize.width * 0.92, (stageSize.height - 24) * aspect * 2),
+                    ) * zoom,
+                } as React.CSSProperties
+              }
+            >
+              {cover && coverUrl ? (
+                <button
+                  className="pdf-cover"
+                  onClick={() => setCover(false)}
+                  aria-label="Open document cover"
+                >
+                  <img src={coverUrl} alt={`${title} cover`} />
+                </button>
+              ) : (
+                document && (
+                  <>
+                    <div className="pdf-spread">
+                      {displayed.map((n, index) => (
+                        <button
+                          key={index}
+                          className="pdf-paper"
+                          aria-label={index === 0 ? 'Turn previous page' : 'Turn next page'}
+                          onClick={() => void go(index === 0 ? -1 : 1)}
+                        >
+                          {n <= document.numPages ? (
+                            <PageImage page={n} load={load} />
+                          ) : (
+                            <span>End of document</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {turn && (
+                      <div
+                        className={`pdf-turn ${turn.direction === 1 ? 'forward' : 'backward'}`}
+                        key={`${turn.from}-${turn.to}`}
                       >
-                        {n <= document.numPages ? (
-                          <PageImage page={n} load={load} />
-                        ) : (
-                          <span>End of document</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  {turn && (
-                    <div
-                      className={`pdf-turn ${turn.direction === 1 ? 'forward' : 'backward'}`}
-                      key={`${turn.from}-${turn.to}`}
-                    >
-                      <div className="pdf-turn-front">
-                        {(turn.direction === 1 ? turn.from + 1 : turn.from) <=
-                          document.numPages && (
+                        <div className="pdf-turn-front">
+                          {(turn.direction === 1 ? turn.from + 1 : turn.from) <=
+                            document.numPages && (
+                            <PageImage
+                              page={turn.direction === 1 ? turn.from + 1 : turn.from}
+                              load={load}
+                            />
+                          )}
+                        </div>
+                        <div className="pdf-turn-back">
                           <PageImage
-                            page={turn.direction === 1 ? turn.from + 1 : turn.from}
+                            page={turn.direction === 1 ? turn.to : turn.to + 1}
                             load={load}
                           />
-                        )}
+                        </div>
                       </div>
-                      <div className="pdf-turn-back">
-                        <PageImage
-                          page={turn.direction === 1 ? turn.to : turn.to + 1}
-                          load={load}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )
-            )}
-          </div>
+                    )}
+                  </>
+                )
+              )}
+            </div>
+          )}
         </ZoomSurface>
       </div>
-      <p className="pdf-hint">
-        Click the page edges or use ← → · scroll or pinch at a point for finer detail · original
-        pages, rendered from your PDF
-      </p>
+      {!flat && (
+        <p className="pdf-hint">
+          Click the page edges or use ← → · scroll or pinch at a point for finer detail · original
+          pages, rendered from your PDF
+        </p>
+      )}
     </div>
   );
 }

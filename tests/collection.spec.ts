@@ -253,6 +253,7 @@ test('certificate editor crops originals with a live 3D preview and saves metada
     await page
       .getByLabel('Upload front', { exact: true })
       .setInputFiles('/tmp/library-fixtures/cover.png');
+    await page.getByRole('button', { name: 'Upload anyway — stretch to fit', exact: true }).click();
     await expect(page.locator('.collection-editor .book-preview').first()).toHaveAttribute(
       'data-textures-ready',
       'true',

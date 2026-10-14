@@ -79,7 +79,7 @@ export default function Reader({
   useEffect(() => {
     let active = true,
       url = '';
-    if (book.front)
+    if (book.front && role !== 'manual')
       void repository
         .texture(book.front.id)
         .then((blob) => {
@@ -92,7 +92,7 @@ export default function Reader({
       active = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [book.front?.id, repository]);
+  }, [book.front?.id, repository, role]);
   const [url, setUrl] = useState(''),
     [chapters, setChapters] = useState<Chapter[]>([]),
     [chapter, setChapter] = useState(0),
@@ -127,7 +127,7 @@ export default function Reader({
     <section className="library-reader" role="dialog" aria-label={`Reading ${book.title}`}>
       <header>
         <div>
-          <small>THE READING ROOM</small>
+          <small>{role === 'manual' ? 'MANUAL / DOCUMENT VIEW' : 'THE READING ROOM'}</small>
           <h2>{book.title}</h2>
         </div>
         <button className="xp-button" onClick={onClose}>
@@ -135,10 +135,16 @@ export default function Reader({
         </button>
       </header>
       {error && <p role="alert">{error}</p>}
-      {!url && !error && <div className="library-loading">Opening your book…</div>}
+      {!url && !error && <div className="library-loading">Opening document…</div>}
       {url && documentAsset?.mime === 'application/pdf' && (
         <Suspense fallback={<p>Preparing document reader…</p>}>
-          <PdfReader url={url} title={book.title} coverUrl={coverUrl} active={active} />
+          <PdfReader
+            url={url}
+            title={book.title}
+            coverUrl={coverUrl}
+            active={active}
+            flat={role === 'manual'}
+          />
         </Suspense>
       )}
       {chapters.length > 0 && (

@@ -49,8 +49,75 @@ test(
       } finally {
         c.release();
       }
+      const cases = [
+        {
+          preset: 'ps3',
+          width: 2.15,
+          height: 2.65,
+          thickness: 0.22,
+          expected: [1.748, 2.15, 0.22],
+        },
+        {
+          preset: 'ps4',
+          width: 2.15,
+          height: 2.65,
+          thickness: 0.22,
+          expected: [1.795, 2.551, 0.189],
+        },
+        {
+          preset: 'ps5',
+          width: 2.15,
+          height: 2.65,
+          thickness: 0.22,
+          expected: [1.795, 2.551, 0.189],
+        },
+        { preset: '', width: 2.15, height: 2.65, thickness: 0.22, expected: [1.795, 2.551, 0.189] },
+        {
+          preset: undefined,
+          width: 2.15,
+          height: 2.65,
+          thickness: 0.22,
+          expected: [1.795, 2.551, 0.189],
+        },
+        { preset: 'ps5', width: 2, height: 3, thickness: 0.3, expected: [2, 3, 0.3] },
+        { preset: 'dvd', width: 2.15, height: 2.65, thickness: 0.22, expected: [2.15, 2.65, 0.22] },
+      ].map((v) => ({ ...v, id: randomUUID() }));
+      const seed = await scoped.connect();
+      try {
+        for (const v of cases)
+          await seed.query('INSERT INTO books(id,shelf_id,metadata,front) VALUES($1,$2,$3,$4)', [
+            v.id,
+            shelf,
+            {
+              title: 'Keep title',
+              objectType: v.preset ? 'dvd' : 'ps5',
+              width: v.width,
+              height: v.height,
+              thickness: v.thickness,
+              presentation: { casePreset: v.preset },
+            },
+            asset,
+          ]);
+      } finally {
+        seed.release();
+      }
       await migrate(scoped);
       await migrate(scoped);
+      const verify = await scoped.connect();
+      try {
+        for (const v of cases) {
+          const row = (await verify.query('SELECT metadata,front FROM books WHERE id=$1', [v.id]))
+            .rows[0];
+          assert.deepEqual(
+            [row.metadata.width, row.metadata.height, row.metadata.thickness],
+            v.expected,
+          );
+          assert.equal(row.metadata.title, 'Keep title');
+          assert.equal(row.front, asset);
+        }
+      } finally {
+        verify.release();
+      }
       const c2 = await scoped.connect();
       try {
         const {
@@ -62,7 +129,7 @@ test(
         assert.equal(saved.metadata.title, metadata.title);
         assert.equal(saved.metadata.objectType, 'book');
         assert.equal(saved.metadata.presentation.textOverlay, false);
-        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 4);
+        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 5);
         const policies = await c2.query(
           "SELECT relrowsecurity FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace WHERE nspname=$1 AND relname IN ('assets','books','shelves','sessions')",
           [schema],
