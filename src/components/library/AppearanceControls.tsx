@@ -70,7 +70,7 @@ export default function AppearanceControls({
             />{' '}
             Include {p.casePreset === 'cassette-clear' ? 'cassette' : 'disc'} inside the case
           </label>
-          <p>Use the artwork gallery to browse covers, disc labels and inserts.</p>
+          <p>Open the case to inspect its disc, booklet and inserts.</p>
         </>
       )}
       {type.geometry === 'certificate' && p.frame && (

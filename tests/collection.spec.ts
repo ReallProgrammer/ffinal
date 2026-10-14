@@ -279,6 +279,20 @@ test('certificate editor crops originals with a live 3D preview and saves metada
     expect(saved.front.crop.zoom).toBe(1.5);
     expect(saved.front.crop.x).toBe(0.7);
     expect(saved.presentation.textOverlay).toBe(false);
+    await page.getByRole('button', { name: 'Edit ' + name, exact: true }).click();
+    await page.getByRole('button', { name: 'Adjust front crop', exact: true }).click();
+    await page.getByRole('button', { name: 'Use entire image', exact: true }).click();
+    await expect(page.locator('.crop-editor')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save & publish', exact: true }).click();
+    await expect(page.locator('.collection-organizer')).toContainText(name);
+    const restored = (
+      await (await context.request.get(api + '/admin/collection', { headers })).json()
+    ).books.find((b: any) => b.id === item);
+    expect(restored.front.crop).toBeUndefined();
+    expect(restored.front.width).toBe(saved.front.width);
+    expect(restored.front.height).toBe(saved.front.height);
+    await context.request.delete(api + '/admin/assets/' + asset, { headers });
+    asset = restored.front.id;
   } finally {
     if (item) await context.request.delete(api + '/admin/items/' + item, { headers });
     if (shelf) await context.request.delete(api + '/admin/shelves/' + shelf, { headers });

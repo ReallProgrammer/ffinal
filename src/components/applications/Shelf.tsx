@@ -46,6 +46,7 @@ export default function Shelf({
     [indexOpen, setIndexOpen] = useState(false),
     [page, setPage] = useState(0),
     [artwork, setArtwork] = useState<LibraryBook | null>(null),
+    [artworkIndex, setArtworkIndex] = useState(0),
     [readingRole, setReadingRole] = useState<'manual' | undefined>();
   const [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
@@ -136,7 +137,19 @@ export default function Shelf({
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [active, selected, reading, mode, caseOpen, artwork]);
+  }, [active, selected, reading, mode, caseOpen, artwork, load]);
+  useEffect(() => {
+    if (!active) return;
+    const refreshKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        void load(true);
+      }
+    };
+    // Capture before inline editors consume keystrokes, keeping unsaved drafts intact.
+    window.addEventListener('keydown', refreshKey, true);
+    return () => window.removeEventListener('keydown', refreshKey, true);
+  }, [active, load]);
   const availableCategories = categories.filter(
     (c) =>
       c.id === 'all' ||
@@ -515,6 +528,7 @@ export default function Shelf({
                     reduced={reduced}
                     zoom={zoom}
                     caseOpen={caseOpen}
+                    onToggleCase={() => setCaseOpen((v) => !v)}
                     autoRotate={autoRotate}
                     resetKey={resetKey}
                     onHover={setHover}
@@ -542,14 +556,23 @@ export default function Shelf({
                   </p>
                 </div>
               )}
+              <button
+                className="shelf-edge shelf-edge-previous"
+                aria-label="Previous shelf"
+                disabled={data.shelves.length < 2}
+                onClick={() => browseShelf(-1)}
+              >
+                ‹
+              </button>
+              <button
+                className="shelf-edge shelf-edge-next"
+                aria-label="Next shelf"
+                disabled={data.shelves.length < 2}
+                onClick={() => browseShelf(1)}
+              >
+                ›
+              </button>
               <div className="library-scene-top">
-                <button
-                  aria-label="Previous shelf"
-                  disabled={data.shelves.length < 2}
-                  onClick={() => browseShelf(-1)}
-                >
-                  ‹
-                </button>
                 <select
                   aria-label="Choose shelf"
                   value={shelf}
@@ -562,13 +585,7 @@ export default function Shelf({
                     </option>
                   ))}
                 </select>
-                <button
-                  aria-label="Next shelf"
-                  disabled={data.shelves.length < 2}
-                  onClick={() => browseShelf(1)}
-                >
-                  ›
-                </button>
+
                 <span>
                   {loading
                     ? 'Opening library…'
@@ -665,14 +682,46 @@ export default function Shelf({
                   </p>
                 )}
 
-                {(current.front ||
+                {objectType(current).geometry === 'case' && (
+                  <button className="xp-button" onClick={() => setCaseOpen((v) => !v)}>
+                    {caseOpen ? 'Close case' : 'Open case'}
+                  </button>
+                )}
+                {(current.gallery?.length ||
+                  current.front ||
                   current.back ||
                   Object.values(current.artwork || {}).some((asset) =>
                     asset?.mime.startsWith('image/'),
                   )) && (
-                  <button className="xp-button" onClick={() => setArtwork(current)}>
+                  <button
+                    className="xp-button"
+                    onClick={() => {
+                      setArtworkIndex(0);
+                      setArtwork(current);
+                    }}
+                  >
                     View flat artwork
                   </button>
+                )}
+                {!!current.gallery?.length && (
+                  <div className="collection-photo-strip" aria-label="Collection photos">
+                    {current.gallery.map((asset, index) => (
+                      <button
+                        key={asset.id}
+                        aria-label={`View photo ${index + 1}`}
+                        onClick={() => {
+                          setArtworkIndex(index);
+                          setArtwork(current);
+                        }}
+                      >
+                        <CollectionThumbnail
+                          id={asset.id}
+                          repository={repository}
+                          color={current.color}
+                        />
+                      </button>
+                    ))}
+                  </div>
                 )}
                 {current.artwork?.manual && (
                   <button
@@ -767,7 +816,12 @@ export default function Shelf({
         </>
       )}
       {artwork && (
-        <ArtworkViewer item={artwork} repository={repository} onClose={() => setArtwork(null)} />
+        <ArtworkViewer
+          initialIndex={artworkIndex}
+          item={artwork}
+          repository={repository}
+          onClose={() => setArtwork(null)}
+        />
       )}
       {reading && (
         <Reader

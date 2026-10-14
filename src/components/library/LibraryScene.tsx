@@ -5,7 +5,7 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as Orbit } from 'three-stdlib';
 import BookModel from './BookModel';
-import { footprint } from '../../lib/library/registry';
+import { footprint, objectType } from '../../lib/library/registry';
 import type { LibraryBook, LibraryRepository, LibraryShelf } from '../../lib/library/types';
 import { objectViewBounds } from '../../lib/library/view';
 class SceneBoundary extends Component<
@@ -155,10 +155,12 @@ function ViewingControls({
       )
     : null;
   const offset = useMemo(() => new THREE.Vector3(), []);
-  useFrame(() => {
+  useFrame((_, delta) => {
     const controls = orbitRef.current;
     if (!controls) return;
-    if (autoRotate && item && !reduced) invalidate();
+    // OrbitControls integrates per update; compensate for slower devices.
+    controls.autoRotateSpeed = 2 * Math.min(delta, 0.1) * 60;
+    if (autoRotate && item) invalidate();
     if (!bounds) return;
     // Cursor zoom and right-drag may move the orbit target. Keep both the target
     // and camera around this object's enclosure, including when viewing its back.
@@ -197,8 +199,8 @@ function ViewingControls({
     <OrbitControls
       ref={orbitRef}
       makeDefault
-      autoRotate={Boolean(item && autoRotate && !reduced)}
-      autoRotateSpeed={0.8}
+      autoRotate={Boolean(item && autoRotate)}
+      autoRotateSpeed={2}
       enablePan
       screenSpacePanning
       panSpeed={0.6}
@@ -500,7 +502,7 @@ export function BookPreview({
   repository: LibraryRepository;
   reduced: boolean;
 }) {
-  const open = false;
+  const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const orbit = useRef<Orbit>(null);
@@ -517,6 +519,7 @@ export function BookPreview({
             repository={repository}
             inspection
             caseOpen={open}
+            onToggleCase={() => setOpen((v) => !v)}
             reduced={reduced}
             onReady={setReady}
             onError={setError}
@@ -538,6 +541,11 @@ export function BookPreview({
             orbitRef={orbit}
           />
         </Canvas>
+        {objectType(book).geometry === 'case' && (
+          <button type="button" className="preview-case-toggle" onClick={() => setOpen((v) => !v)}>
+            {open ? 'Close case' : 'Open case'}
+          </button>
+        )}
         {!ready && <small>{error || 'Preparing cover textures…'}</small>}
       </div>
     </SceneBoundary>

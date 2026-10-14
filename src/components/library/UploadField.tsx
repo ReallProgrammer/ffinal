@@ -51,7 +51,7 @@ export default function UploadField({
     setProgress(0);
     onBusy(true);
     try {
-      let uploaded = await repository.upload(
+      const uploaded = await repository.upload(
         file,
         kind,
         (p) => {
@@ -62,17 +62,6 @@ export default function UploadField({
         },
         operation.signal,
       );
-      if (operation.signal.aborted) throw new Error('Upload cancelled.');
-      if (image && !['wrap', 'decal'].includes(kind)) {
-        setStatus('Preparing surface texture…');
-        setProgress(null);
-        uploaded = await repository.crop(uploaded.id, {
-          x: 0.5,
-          y: 0.5,
-          zoom: 1,
-          ratio: surfaceRatio(item, kind),
-        });
-      }
       if (operation.signal.aborted) throw new Error('Upload cancelled.');
       if (mounted.current) {
         await onChange(uploaded);
@@ -111,7 +100,7 @@ export default function UploadField({
               : `${kind[0].toUpperCase() + kind.slice(1)} artwork`)}
       </strong>
       <small>
-        {['wrap', 'decal'].includes(kind)
+        {['wrap', 'decal', 'gallery'].includes(kind)
           ? 'PNG / JPEG / WebP · max 10 MB · original aspect ratio preserved'
           : image
             ? `${surfaceRatio(item, kind).toFixed(3)}:1 ratio · ${size[0]} × ${size[1]} px recommended · PNG / JPEG / WebP · 10 MB`
@@ -165,12 +154,19 @@ export default function UploadField({
           </button>
         </div>
       )}
-      {asset?.lowResolution && (
-        <small className="crop-warning">Low resolution: a larger original will look sharper.</small>
-      )}
+      {asset &&
+        image &&
+        !['wrap', 'gallery', 'decal'].includes(kind) &&
+        (asset.lowResolution ||
+          (asset.width || Infinity) < size[0] ||
+          (asset.height || Infinity) < size[1]) && (
+          <small className="crop-warning">
+            Low resolution: a larger original will look sharper.
+          </small>
+        )}
       {asset && (
         <div>
-          {image && !['wrap', 'decal'].includes(kind) && (
+          {image && !['wrap', 'decal', 'gallery'].includes(kind) && (
             <button type="button" onClick={onCrop}>
               Adjust {kind} crop
             </button>

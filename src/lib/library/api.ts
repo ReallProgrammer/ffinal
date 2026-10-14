@@ -13,6 +13,7 @@ export function bookInput(book: LibraryBook): BookInput {
     category: _category,
     model,
     artwork,
+    gallery,
     layerAssets: _layerAssets,
     canRead: _read,
     front,
@@ -23,6 +24,7 @@ export function bookInput(book: LibraryBook): BookInput {
   } = book;
   return {
     ...metadata,
+    gallery: (gallery || []).map((asset) => asset.id),
     artwork: Object.fromEntries(
       Object.entries(artwork || {}).map(([role, asset]) => [role, asset?.id || null]),
     ),

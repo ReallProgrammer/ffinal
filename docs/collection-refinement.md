@@ -62,3 +62,11 @@ Release the backend first, verify its type registry and health, then publish the
 - Backend rollout preserved all four public item IDs, the two Astro/Astro2 shelf IDs, shelf assignments and primary asset references. Production smoke checks use public reads only.
 
 For concurrent Playwright invocations, use distinct `--output` directories to avoid trace cleanup collisions. Test credentials, local fixtures and deployment snapshots remain outside source control.
+
+### Collection corrections (October 2026)
+
+The organizer uses category illustrations, independent of uploaded cover/model thumbnails. Shelf arrows sit halfway down either edge of the room. New PC, PS5 and Xbox objects share the same default dimensions; existing custom dimensions and saved artwork remain intact. Game cases have no extra header band. Images fit completely by default; deliberate cropping is still available through Adjust crop. Open case restores the existing hinge, disc and booklet presentation. Explicit auto-rotation overrides reduced-motion only while its checkbox is enabled and allows a full revolution. Ctrl+R inside the active collection refreshes its data and scene without restarting the OS or discarding the owner editor draft.
+
+Cover layers are additions to base artwork. Add image and Add text share the toolbar; text is edited in place and moved with its handle. Sticker-only case textures retain transparent areas so the plastic shows through.
+
+Photo gallery accepts up to 20 additional PNG/JPEG/WebP images (10 MB each), separately from front/spine/back and interior textures. Owners can reorder or remove gallery entries in the editor. Item writes accept an ordered `gallery` array of uploaded asset UUIDs; reads return asset descriptors. Migration 5 allows the `gallery` asset kind, and ordered references use `book_assets` roles `gallery:0`, `gallery:1`, etc. Existing upload validation, authentication, public visibility checks, immutable optimized images and private originals apply. Old clients omitting `gallery` preserve existing references. Deploy the backend with migration 5 before the frontend; no new credentials or services are needed.

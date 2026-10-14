@@ -1,3 +1,5 @@
+import { layerTextSize } from '../../lib/library/layer-text';
+import { casePreset } from '../../lib/library/presets';
 import { sourceBlob, clearAssetCache } from '../../lib/library/asset-cache';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -120,6 +122,7 @@ function key(item: LibraryBook) {
     item.presentation?.frameWidth,
     item.presentation?.frame,
     item.presentation?.casePreset,
+    item.presentation?.caseColor,
     item.width,
     item.height,
     item.thickness,
@@ -164,14 +167,21 @@ async function load(
         );
         canvas.height = Math.max(16, Math.round(canvas.width / ratio));
         const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = item.color;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle =
+          objectType(item).geometry === 'case'
+            ? item.presentation?.caseColor || casePreset(item).color
+            : item.color;
         const asset = artworkAsset(item, face);
+        const overlayOnly =
+          objectType(item).geometry === 'case' &&
+          !asset &&
+          ['front', 'spine', 'back', 'interior'].includes(face);
+        if (!overlayOnly) ctx.fillRect(0, 0, canvas.width, canvas.height);
         if (asset) {
           const blob = await sourceBlob(repository, asset.id, detail ? 'detail' : 'overview');
           const bitmap = await createImageBitmap(blob);
           try {
-            const scale = Math.max(canvas.width / bitmap.width, canvas.height / bitmap.height);
+            const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
             ctx.drawImage(
               bitmap,
               (canvas.width - bitmap.width * scale) / 2,
@@ -206,7 +216,7 @@ async function load(
             bitmap.close();
           } else if (layer.type === 'text') {
             ctx.fillStyle = layer.color;
-            ctx.font = `${h * 0.72}px ${layer.font}`;
+            ctx.font = `${layerTextSize(layer, w, h)}px ${layer.font}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(layer.text || '', 0, 0, w);
@@ -222,6 +232,7 @@ async function load(
           ctx.fillText(item.title, canvas.width / 2, canvas.height * 0.8, canvas.width * 0.85);
         }
         const texture = new THREE.CanvasTexture(canvas);
+        texture.userData.overlayOnly = overlayOnly;
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = 16;
         texture.minFilter = THREE.LinearMipmapLinearFilter;

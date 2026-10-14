@@ -37,7 +37,8 @@ function Panel({
           metalness={0}
           transmission={plastic && !map ? (1 - opacity) * 0.65 : 0}
           thickness={0.03}
-          transparent={plastic && !map}
+          transparent={Boolean(map?.userData.overlayOnly) || (plastic && !map)}
+          alphaTest={map?.userData.overlayOnly ? 0.001 : 0}
           opacity={plastic && !map ? Math.max(0.45, opacity) : 1}
           clearcoat={plastic ? 0.65 : 0}
           clearcoatRoughness={0.25}
@@ -120,8 +121,9 @@ export default function MediaCase({
       state.invalidate();
     }
   });
+  const band = game ? 0 : preset.band;
   const iw = w - 0.09,
-    ih = h - preset.band - 0.075,
+    ih = h - band - 0.075,
     discRadius = Math.min(w * 0.43, h * 0.38),
     z = -d / 2 + wall * 2;
   const insert = (role: 'booklet' | 'card' | 'insert', pos: V, size: V) =>
@@ -138,12 +140,14 @@ export default function MediaCase({
       }}
     >
       <Panel size={[w, h, wall]} position={[0, 0, -d / 2]} {...plastic} />
-      <Panel
-        size={[iw, ih, 0.008]}
-        position={[0, -preset.band / 2, -d / 2 - 0.012]}
-        back={resources.maps.back}
-        color={color}
-      />
+      {resources.maps.back && (
+        <Panel
+          size={[iw, ih, 0.008]}
+          position={[0, -band / 2, -d / 2 - 0.012]}
+          back={resources.maps.back}
+          color={color}
+        />
+      )}
       <Panel
         size={[w - wall * 2, h - wall * 2, wall]}
         position={[0, 0, z]}
@@ -163,6 +167,8 @@ export default function MediaCase({
         <boxGeometry args={[d, h, 0.003]} />
         <meshStandardMaterial
           map={resources.maps.spine}
+          transparent={Boolean(resources.maps.spine?.userData.overlayOnly)}
+          alphaTest={resources.maps.spine?.userData.overlayOnly ? 0.001 : 0}
           color={resources.maps.spine ? 'white' : color}
           roughness={0.65}
         />
@@ -253,20 +259,16 @@ export default function MediaCase({
       <group ref={cover} position={bottom ? [0, -h / 2, d / 2] : [-w / 2, 0, d / 2]}>
         <group position={bottom ? [0, h / 2, 0] : [w / 2, 0, 0]}>
           <Panel size={[w, h, wall]} {...plastic} />
-          <Panel
-            size={[iw, ih, 0.008]}
-            position={[0, -preset.band / 2, 0.014]}
-            front={resources.maps.front}
-            back={resources.maps.interior}
-            color="#e5e3d8"
-          />
-          {item.objectType === 'ps5' && (
+          {(resources.maps.front || resources.maps.interior) && (
             <Panel
-              size={[iw, preset.band * 0.72, 0.009]}
-              position={[0, h / 2 - preset.band * 0.5, 0.015]}
-              color="#f3f4f3"
+              size={[iw, ih, 0.008]}
+              position={[0, -band / 2, 0.014]}
+              front={resources.maps.front}
+              back={resources.maps.interior}
+              color={color}
             />
           )}
+
           {(item.artwork?.booklet || item.artwork?.manual) && (
             <Panel
               size={[iw * 0.76, (iw * 0.76 * item.height) / item.width, 0.035]}

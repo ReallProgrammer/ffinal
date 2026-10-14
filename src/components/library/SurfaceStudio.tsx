@@ -1,3 +1,5 @@
+import { layerTextSize } from '../../lib/library/layer-text';
+import { casePreset } from '../../lib/library/presets';
 import { useEffect, useRef, useState } from 'react';
 import type {
   BookAsset,
@@ -69,6 +71,7 @@ export default function SurfaceStudio({
       mode: 'move' | 'resize' | 'rotate';
     } | null>(null),
     area = useRef<HTMLDivElement>(null);
+  const imageUpload = useRef<HTMLDivElement>(null);
   const layers = item.layers?.[surface] || [],
     current = layers.find((v) => v.id === selected),
     url = useImage(repository, artworkAsset(item, surface)?.id);
@@ -189,18 +192,20 @@ export default function SurfaceStudio({
   return (
     <section className="surface-studio">
       <h3>Cover layers</h3>
-      <UploadField
-        item={item}
-        kind="decal"
-        label="cover layer"
-        disabled={blocked}
-        repository={repository}
-        onBusy={onBusy}
-        onCrop={() => {}}
-        onChange={(asset) => {
-          if (asset) add(asset);
-        }}
-      />
+      <div ref={imageUpload} className="layer-image-upload">
+        <UploadField
+          item={item}
+          kind="decal"
+          label="cover layer"
+          disabled={blocked}
+          repository={repository}
+          onBusy={onBusy}
+          onCrop={() => {}}
+          onChange={(asset) => {
+            if (asset) add(asset);
+          }}
+        />
+      </div>
       <fieldset disabled={blocked} className="studio-controls">
         <p>
           Place images, logos, QR artwork, or optional text directly on the cover. These layers
@@ -221,6 +226,13 @@ export default function SurfaceStudio({
           </select>
         </label>
         <div className="layer-toolbar">
+          <button
+            type="button"
+            disabled={layers.length >= 30}
+            onClick={() => imageUpload.current?.querySelector('input')?.click()}
+          >
+            Add image
+          </button>
           <button type="button" disabled={layers.length >= 30} onClick={() => add()}>
             Add text
           </button>
@@ -265,7 +277,10 @@ export default function SurfaceStudio({
           className="layer-canvas"
           style={{
             aspectRatio: surfaceRatio(item, surface),
-            backgroundColor: item.color,
+            backgroundColor:
+              objectType(item).geometry === 'case'
+                ? item.presentation?.caseColor || casePreset(item).color
+                : item.color,
             backgroundImage: url ? `url("${url}")` : undefined,
           }}
           onPointerMove={move}
@@ -312,23 +327,40 @@ export default function SurfaceStudio({
               {layer.type === 'image' && layer.assetId ? (
                 <LayerImage id={layer.assetId} repository={repository} />
               ) : (
-                <svg viewBox="0 0 500 100" preserveAspectRatio="none">
-                  <text
-                    x="250"
-                    y="50"
-                    dominantBaseline="middle"
-                    textAnchor="middle"
-                    fill="currentColor"
-                    fontSize="72"
-                    textLength={Math.max(1, Math.min(480, (layer.text || '').length * 40))}
-                    lengthAdjust="spacingAndGlyphs"
-                  >
-                    {layer.text}
-                  </text>
-                </svg>
+                <input
+                  className="layer-inline-text"
+                  aria-label="Edit layer text"
+                  value={layer.text || ''}
+                  maxLength={500}
+                  readOnly={layer.locked}
+                  style={{
+                    fontFamily: layer.font,
+                    color: layer.color,
+                    fontSize: `${layerTextSize(layer, layer.width * surfaceRatio(item, surface) * 100, layer.height * 100)}cqh`,
+                  }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setSelected(layer.id);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  onFocus={() => setSelected(layer.id)}
+                  onChange={(e) =>
+                    write(
+                      layers.map((v) => (v.id === layer.id ? { ...v, text: e.target.value } : v)),
+                    )
+                  }
+                />
               )}
               {selected === layer.id && !layer.locked && (
                 <>
+                  <button
+                    type="button"
+                    className="layer-move"
+                    aria-label="Move layer"
+                    onPointerDown={(e) => start(e, layer, 'move')}
+                  >
+                    ✥
+                  </button>
                   <button
                     type="button"
                     className="layer-resize"
@@ -369,15 +401,6 @@ export default function SurfaceStudio({
             </label>
             {current.type === 'text' && (
               <>
-                <label>
-                  Layer text
-                  <input
-                    value={current.text || ''}
-                    maxLength={500}
-                    disabled={current.locked}
-                    onChange={(e) => patch({ text: e.target.value })}
-                  />
-                </label>
                 <label>
                   Text color
                   <input

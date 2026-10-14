@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-test('owner saves wrap art, layers, interior files and exact placement; visitors browse a multi-surface artwork gallery', async ({
+test('owner saves wrap art, layers, interior files and exact placement; visitors browse a separate photo gallery', async ({
   page,
   context,
 }, info) => {
@@ -56,6 +56,24 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await genreRow.getByRole('checkbox').check();
     await genreRow.getByRole('button', { name: /^Delete genre/ }).click();
     await expect(genreRow).toHaveCount(0);
+    // The image toolbar uploads a separate transparent layer without needing base artwork.
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Add image', exact: true }).click();
+    const decalUpload = page.waitForResponse(
+      (r) => r.url() === base + '/admin/uploads' && r.request().method() === 'POST',
+    );
+    await (await chooser).setFiles('/tmp/library-fixtures/revised.png');
+    assetIds.push((await (await decalUpload).json()).id);
+    await expect(page.locator('.cover-layer img')).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^front Add$/ })).toBeVisible();
+    await expect(page.locator('.layer-canvas')).not.toHaveCSS(
+      'background-color',
+      'rgb(56, 85, 72)',
+    );
+    await expect(page.locator('.book-preview')).toHaveAttribute('data-textures-ready', 'true', {
+      timeout: 20000,
+    });
+    await page.getByRole('button', { name: 'Delete layer', exact: true }).click();
     await page.getByLabel('Title', { exact: true }).fill(name);
     await page.getByLabel('Shelf', { exact: true }).selectOption(shelf);
     await page.getByRole('tab', { name: /Full wrap/ }).click();
@@ -84,8 +102,25 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
         .filter({ has: page.getByLabel('Upload manual', { exact: true }) }),
     ).toContainText('Ready');
     await page.getByLabel('Reading access').selectOption('public');
+    for (const file of ['cover.png', 'revised.png']) {
+      await page
+        .getByLabel('Upload gallery photo', { exact: true })
+        .setInputFiles('/tmp/library-fixtures/' + file);
+      await expect(page.locator('.collection-photo-list li')).toHaveCount(
+        file === 'cover.png' ? 1 : 2,
+      );
+    }
+    await expect(page.getByRole('button', { name: 'Add image', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add text', exact: true }).click();
-    await page.getByLabel('Layer text', { exact: true }).fill('COLLECTOR');
+    await page.getByLabel('Edit layer text', { exact: true }).fill('COLLECTOR');
+    await expect(page.getByLabel('Edit layer text', { exact: true })).toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)',
+    );
+    await expect(page.getByLabel('Edit layer text', { exact: true })).toHaveCSS(
+      'border-top-width',
+      '0px',
+    );
     await expect(page.locator('.layer-properties input[type=number]')).toHaveCount(0);
     const rotationHandle = page.getByRole('button', { name: 'Rotate layer', exact: true });
     await rotationHandle.scrollIntoViewIfNeeded();
@@ -109,7 +144,8 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect(page.locator('.cover-layer')).toHaveCount(1);
     if (info.project.name === 'desktop') {
-      const layer = page.locator('.cover-layer').first();
+      await page.getByLabel('Edit layer text', { exact: true }).click();
+      const layer = page.getByRole('button', { name: 'Move layer', exact: true });
       await layer.scrollIntoViewIfNeeded();
       const b = (await layer.boundingBox())!;
       await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
@@ -118,6 +154,16 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       await page.mouse.up();
       await page.getByRole('button', { name: 'Undo', exact: true }).click();
     }
+    await page
+      .locator('.layer-canvas')
+      .screenshot({ path: `/workspace/artifacts/corrections-${info.project.name}-layers.png` });
+    await page
+      .locator('.book-preview')
+      .screenshot({ path: `/workspace/artifacts/corrections-${info.project.name}-case.png` });
+    const caseButton = (await page
+      .getByRole('button', { name: 'Open case', exact: true })
+      .boundingBox())!;
+    expect(caseButton.height).toBeLessThan(60);
     await page.getByLabel('Tags (comma separated)').fill('games, collection');
     await page.getByLabel('Published — visible to visitors').check();
     await page.screenshot({
@@ -129,12 +175,21 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     });
     const saved = await (await context.request.get(base + '/admin/collection', { headers })).json();
     const item = saved.books.find((b: any) => b.title === name);
+    expect(item.gallery).toHaveLength(2);
+    expect(item.gallery[0].filename).toBe('cover.png');
     expect(item.layers.front).toHaveLength(1);
+    await expect(page.locator('.organizer-category-illustration img')).toHaveCount(0);
     expect(item.layers.front[0].text).toBe('COLLECTOR');
     expect(item.tags).toEqual(['games', 'collection']);
     expect(item.artwork.manual).toBeTruthy();
     id = item.id;
-    for (const a of [item.front, item.spine, item.back, ...Object.values(item.artwork)] as any[])
+    for (const a of [
+      item.front,
+      item.spine,
+      item.back,
+      ...item.gallery,
+      ...Object.values(item.artwork),
+    ] as any[])
       if (a) assetIds.push(a.id);
     // Cancel keyboard pickup; verify pointer placement separately on desktop.
     const handle = page.getByRole('button', { name: 'Drag ' + name, exact: true });
@@ -188,13 +243,16 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
       'true',
       { timeout: 30000 },
     );
-    await expect(page.getByRole('button', { name: 'Open case', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Open case', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Close case', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close case', exact: true }).click();
+    await expect(page.getByLabel('Collection photos').getByRole('button')).toHaveCount(2);
     await page.getByRole('button', { name: 'View flat artwork', exact: true }).click();
-    await expect(page.getByLabel('Artwork gallery').getByRole('button')).toHaveCount(4);
+    await expect(page.getByLabel('Artwork gallery').getByRole('button')).toHaveCount(2);
     await page.getByLabel('Next artwork', { exact: true }).click();
-    await expect(page.locator('.artwork-gallery-footer')).toContainText('Spine');
+    await expect(page.locator('.artwork-gallery-footer')).toContainText('Photo 2');
     await page.keyboard.press('ArrowRight');
-    await expect(page.locator('.artwork-gallery-footer')).toContainText('Back');
+    await expect(page.locator('.artwork-gallery-footer')).toContainText('Photo 1');
     await expect(page.locator('.artwork-viewer img[draggable=false]')).toBeVisible();
     const zoom = page.locator('.artwork-viewer .zoom-surface');
     const box = (await zoom.boundingBox())!;

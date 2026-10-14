@@ -178,6 +178,30 @@ export default function CropEditor({
           </button>
           <button
             type="button"
+            disabled={busy || !source}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                const original = await repository.original(asset.id);
+                onSave(
+                  await repository.upload(
+                    new File([original], asset.filename, { type: original.type }),
+                    surface,
+                    () => {},
+                  ),
+                );
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Use entire image
+          </button>
+          <button
+            type="button"
             className="library-read-button"
             disabled={busy || !source}
             onClick={async () => {

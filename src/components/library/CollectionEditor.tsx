@@ -14,6 +14,7 @@ import CollectionThumbnail from './CollectionThumbnail';
 import { artworkAsset } from '../../lib/library/types';
 import { FileImage, FileText, Box, Disc3, PanelsTopLeft } from 'lucide-react';
 import SurfaceStudio from './SurfaceStudio';
+import GalleryEditor from './GalleryEditor';
 import WrapEditor from './WrapEditor';
 import GenreEditor from './GenreEditor';
 import AppearanceControls from './AppearanceControls';
@@ -235,8 +236,8 @@ export default function CollectionEditor({
           <fieldset disabled={busy}>
             <legend>Artwork & files</legend>
             <p>
-              Drop an image onto its surface. Originals stay private. Images fill the surface
-              without stretching; adjust the crop to protect important content.
+              Drop an image onto its surface. Originals stay private. Images fit completely without
+              stretching or trimming; cropping is optional.
             </p>
             <div className="artwork-surface-picker" role="tablist" aria-label="Artwork surfaces">
               {[...(type.surfaces.includes('spine') ? ['wrap' as AssetKind] : []), ...surfaces].map(
@@ -421,6 +422,13 @@ export default function CollectionEditor({
               Reset appearance
             </button>
           </fieldset>
+          <GalleryEditor
+            item={draft}
+            repository={repository}
+            onChange={setDraft}
+            onBusy={setUploading}
+            busy={busy || uploading}
+          />
           {type.id !== 'model' && (
             <SurfaceStudio
               blocked={uploading}

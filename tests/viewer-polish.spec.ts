@@ -15,7 +15,7 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
   context,
 }, info) => {
   test.skip(!process.env.LIBRARY_TEST_CREDENTIALS, 'Real local backend required');
-  test.setTimeout(180000);
+  test.setTimeout(240000);
   const base = process.env.LIBRARY_TEST_API || 'http://127.0.0.1:8787/api/v1';
   const credentials = JSON.parse(await readFile(process.env.LIBRARY_TEST_CREDENTIALS!, 'utf8'));
   const login = await context.request.post(base + '/session', { data: credentials });
@@ -109,6 +109,17 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
     const chooser = (await page.getByLabel('Choose shelf').boundingBox())!;
     const sceneBox = (await page.locator('.library-canvas').boundingBox())!;
     expect(chooser.x - sceneBox.x).toBeLessThan(90);
+    for (const label of ['Previous shelf', 'Next shelf']) {
+      const arrow = (await page.getByLabel(label, { exact: true }).boundingBox())!;
+      expect(
+        Math.abs(arrow.y + arrow.height / 2 - (sceneBox.y + sceneBox.height / 2)),
+      ).toBeLessThan(4);
+      expect(
+        label.startsWith('Previous')
+          ? arrow.x - sceneBox.x
+          : sceneBox.x + sceneBox.width - arrow.x - arrow.width,
+      ).toBeLessThan(25);
+    }
     await expect(page.locator('.library-canvas [data-loading-phase]')).toHaveCount(1);
     const loader = page.locator('.library-canvas [data-loading-phase]');
     const phase = await loader.getAttribute('data-loading-phase');
@@ -215,19 +226,43 @@ test('animated preparation, object-sized zoom limits, right-drag panning and cle
         expect(
           Math.abs(Number(await viewer.getAttribute('data-view-azimuth')) - angle),
         ).toBeLessThan(0.025);
+        // Explicit opt-in must work even with the system's reduced-motion preference.
+        await page.emulateMedia({ reducedMotion: 'reduce' });
         await page.getByLabel('Auto rotate', { exact: true }).check();
         await expect
           .poll(async () =>
             Math.abs(Number(await viewer.getAttribute('data-view-azimuth')) - angle),
           )
           .toBeGreaterThan(0.06);
+        let previousAngle = Number(await viewer.getAttribute('data-view-azimuth')),
+          travel = 0;
+        await expect
+          .poll(
+            async () => {
+              const next = Number(await viewer.getAttribute('data-view-azimuth'));
+              travel += Math.atan2(Math.sin(next - previousAngle), Math.cos(next - previousAngle));
+              previousAngle = next;
+              return Math.abs(travel);
+            },
+            { timeout: 60000, intervals: [500] },
+          )
+          .toBeGreaterThan(Math.PI * 2);
         await page.getByLabel('Auto rotate', { exact: true }).uncheck();
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
         await page.screenshot({
           path: `/workspace/artifacts/viewer-${info.project.name}-certificate-side.png`,
         });
       }
       await page.getByRole('button', { name: 'Return to shelf', exact: true }).click();
     }
+    const refreshing = page.waitForResponse(
+      (r) => r.url() === base + '/collection' && r.request().method() === 'GET',
+    );
+    await page.keyboard.press('Control+r');
+    await refreshing;
+    await expect(page.locator('.library-heading')).toBeVisible();
+    await expect(page.getByLabel('Choose shelf')).toHaveValue(shelf);
+    await expect(page.locator('.boot-screen')).toHaveCount(0);
     expect(errors).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -355,5 +390,54 @@ test('owner removes unused uploads and managed genres immediately or in batches 
     for (const id of assets)
       await context.request.delete(base + '/admin/assets/' + id, { headers });
     await context.request.delete(base + '/session', { headers });
+  }
+});
+
+test('quick refresh from inline cover text preserves the unsaved owner draft', async ({
+  page,
+  context,
+}, info) => {
+  test.skip(!process.env.LIBRARY_TEST_CREDENTIALS, 'Real local backend required');
+  test.setTimeout(60000);
+  const base = process.env.LIBRARY_TEST_API || 'http://127.0.0.1:8787/api/v1';
+  const credentials = JSON.parse(await readFile(process.env.LIBRARY_TEST_CREDENTIALS!, 'utf8'));
+  const shelfName = 'Refresh draft ' + info.project.name + '-' + Date.now();
+  let headers: Record<string, string> = {},
+    shelf = '';
+  try {
+    await openCollection(page);
+    await page.getByRole('button', { name: 'Owner access', exact: true }).click();
+    await page.getByLabel('Owner email', { exact: true }).fill(credentials.email);
+    await page.getByLabel('Password', { exact: true }).fill(credentials.password);
+    const login = page.waitForResponse(
+      (r) => r.url() === base + '/session' && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    headers = { Authorization: 'Bearer ' + (await (await login).json()).token };
+    await page.getByLabel('Shelf name', { exact: true }).fill(shelfName);
+    await page.getByRole('button', { name: 'Add shelf', exact: true }).click();
+    await expect(page.locator('.collection-organizer')).toContainText(shelfName);
+    const data = await (await context.request.get(base + '/admin/collection', { headers })).json();
+    shelf = data.shelves.find((s: any) => s.name === shelfName).id;
+    await page.getByRole('button', { name: '＋ Add to Collection', exact: true }).click();
+    await page
+      .locator('.collection-type-grid')
+      .getByRole('button', { name: /^Book / })
+      .click();
+    await page.getByLabel('Title', { exact: true }).fill('Unsaved collection draft');
+    await page.getByRole('button', { name: 'Add text', exact: true }).click();
+    const text = page.getByLabel('Edit layer text', { exact: true });
+    await text.fill('Keep my text');
+    const refreshed = page.waitForResponse(
+      (r) => r.url() === base + '/admin/collection' && r.request().method() === 'GET',
+    );
+    await text.press('Control+r');
+    await refreshed;
+    await expect(text).toHaveValue('Keep my text');
+    await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Unsaved collection draft');
+    await expect(page.locator('.boot-screen')).toHaveCount(0);
+  } finally {
+    if (shelf) await context.request.delete(base + '/admin/shelves/' + shelf, { headers });
+    if (headers.Authorization) await context.request.delete(base + '/session', { headers });
   }
 });

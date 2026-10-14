@@ -24,7 +24,7 @@ export function surfaceRatio(item: LibraryBook, surface: AssetKind) {
     const preset = presets.cases.find(
       (p) => p.id === (item.presentation?.casePreset || objectType(item).casePreset),
     );
-    const band = preset?.band || 0.035;
+    const band = ['pc', 'ps5', 'xbox'].includes(item.objectType || '') ? 0 : preset?.band || 0.035;
     return (item.width - 0.09) / (item.height - band - 0.075);
   }
   if (geometry === 'certificate' && surface === 'front' && item.presentation?.frame !== false) {

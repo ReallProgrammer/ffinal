@@ -1,6 +1,6 @@
 export type Surface =
   'front' | 'spine' | 'back' | 'disc' | 'interior' | 'booklet' | 'card' | 'insert';
-export type AssetKind = Surface | 'digital' | 'model' | 'wrap' | 'decal' | 'manual';
+export type AssetKind = Surface | 'digital' | 'model' | 'wrap' | 'decal' | 'manual' | 'gallery';
 export type ArtworkRole = 'disc' | 'interior' | 'booklet' | 'card' | 'insert' | 'wrap' | 'manual';
 export interface CoverLayer {
   id: string;
@@ -72,6 +72,7 @@ export interface Presentation {
   rotation: [number, number, number];
 }
 export interface LibraryBook {
+  gallery?: BookAsset[];
   artwork?: Partial<Record<ArtworkRole, BookAsset | null>>;
   layers?: Partial<Record<Surface, CoverLayer[]>>;
   layerAssets?: Record<string, BookAsset>;
@@ -125,6 +126,7 @@ export interface BookInput extends Omit<
   | 'layerAssets'
   | AssetKind
 > {
+  gallery?: string[];
   artwork?: Partial<Record<ArtworkRole, string | null>>;
   model: string | null;
   front: string | null;

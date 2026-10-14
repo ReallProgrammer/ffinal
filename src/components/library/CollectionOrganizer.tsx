@@ -26,8 +26,7 @@ import type {
   LibraryShelf,
   ShelfAppearance,
 } from '../../lib/library/types';
-import CollectionFormatIcon from './CollectionFormatIcon';
-import CollectionThumbnail from './CollectionThumbnail';
+import CollectionIllustration from './CollectionIllustration';
 import { objectType } from '../../lib/library/registry';
 function Sortable({
   id,
@@ -188,20 +187,8 @@ export default function CollectionOrganizer({
                   .filter((b) => b.shelfId === s.id)
                   .map((b) => (
                     <Sortable key={b.id} id={b.id} kind="object" label={b.title} disabled={busy}>
-                      <span
-                        className={`organizer-illustration type-${objectType(b).geometry}`}
-                        style={{ color: b.color }}
-                      >
-                        {b.front ? (
-                          <CollectionThumbnail
-                            id={b.front.id}
-                            repository={repository}
-                            color={b.color}
-                            fallback={<CollectionFormatIcon typeId={b.objectType} />}
-                          />
-                        ) : (
-                          <CollectionFormatIcon typeId={b.objectType} />
-                        )}
+                      <span className="organizer-category-illustration">
+                        <CollectionIllustration item={b} />
                       </span>
                       <div>
                         <small>

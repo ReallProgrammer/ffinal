@@ -6,22 +6,19 @@ import CollectionThumbnail from './CollectionThumbnail';
 import ZoomSurface from './ZoomSurface';
 export default function ArtworkViewer({
   item,
+  initialIndex = 0,
   repository,
   onClose,
 }: {
   item: LibraryBook;
+  initialIndex?: number;
   repository: LibraryRepository;
   onClose: () => void;
 }) {
   const pictures = useMemo(() => {
-    const entries: [string, BookAsset | null | undefined][] = [
-      ['Front', item.front],
-      ['Spine', item.spine],
-      ['Back', item.back],
-      ...Object.entries(item.artwork || {}).filter(
-        ([role]) => !['manual', 'decal', 'wrap'].includes(role),
-      ),
-    ];
+    const entries: [string, BookAsset | null | undefined][] = item.gallery?.length
+      ? item.gallery.map((asset, index) => [`Photo ${index + 1}`, asset])
+      : [['Front', item.front]];
     const seen = new Set<string>();
     return entries.flatMap(([label, asset]) => {
       if (!asset?.mime.startsWith('image/') || seen.has(asset.id)) return [];
@@ -29,7 +26,7 @@ export default function ArtworkViewer({
       return [{ label, asset }];
     });
   }, [item]);
-  const [index, setIndex] = useState(0),
+  const [index, setIndex] = useState(initialIndex),
     [url, setUrl] = useState(''),
     [error, setError] = useState('');
   const current = pictures[index];
@@ -88,7 +85,9 @@ export default function ArtworkViewer({
             <img src={url} alt={`${item.title} — ${current.label}`} draggable={false} />
           </ZoomSurface>
         ) : (
-          <p role="status">Preparing high-resolution artwork…</p>
+          <p role="status">
+            {current ? 'Preparing high-resolution artwork…' : 'No gallery photos uploaded.'}
+          </p>
         )}
         {pictures.length > 1 && (
           <button className="gallery-next" aria-label="Next artwork" onClick={() => change(1)}>
