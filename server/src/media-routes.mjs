@@ -97,7 +97,7 @@ export function mediaRoutes(api, { db, s3, config, owner, session }) {
             .strict()
             .parse(req.body);
           const type = await fileTypeFromBuffer(req.file.buffer).catch(() => undefined);
-          if (!type || !['audio/mpeg', 'video/mp4', 'audio/mp4'].includes(type.mime))
+          if (!type || !['audio/mpeg', 'video/mp4', 'audio/mp4', 'audio/x-m4a'].includes(type.mime))
             throw problem(400, 'Only genuine MP3 or MP4 media files are supported.');
           const id = randomUUID(),
             key = 'media/' + id,

@@ -122,15 +122,18 @@ test('media validates files, protects private uploads, streams byte ranges and p
   assert.equal((await call('/admin/media', 'GET', undefined, '')).status, 401);
   assert.equal((await upload('bad', 'fake.mp3', '')).status, 401);
   assert.equal((await upload('not music', 'fake.mp3')).status, 400);
-  for (const ext of ['mp3', 'mp4']) {
+  for (const ext of ['mp3', 'mp4', 'm4a']) {
     const bytes = await readFile(
-      new URL('../../tests/fixtures/' + (ext === 'mp3' ? 'tone.mp3' : 'film.mp4'), import.meta.url),
+      new URL(
+        '../../tests/fixtures/' + { mp3: 'tone.mp3', mp4: 'film.mp4', m4a: 'voice.m4a' }[ext],
+        import.meta.url,
+      ),
     );
     const r = await upload(bytes, 'sample.' + ext);
     assert.equal(r.status, 201);
     const item = await r.json();
     media.push(item.id);
-    assert.equal(item.kind, ext === 'mp3' ? 'audio' : 'video');
+    assert.equal(item.kind, ext === 'mp4' ? 'video' : 'audio');
     const content = '/media/' + item.id + '/content';
     assert.equal((await call(content, 'GET', undefined, '')).status, 404);
     assert.ok(
