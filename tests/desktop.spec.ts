@@ -1,9 +1,11 @@
+import { passEntry } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 async function desktop(page: Page) {
   await page.goto('/');
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
 }
 async function startApp(page: Page, name: string) {
@@ -22,6 +24,7 @@ test('boot progressively appears and skips into the desktop', async ({ page }) =
   await expect(page.locator('.boot-screen')).toBeVisible();
   await expect(page.getByText('PERSONAL MICRO SYSTEMS', { exact: true })).toBeVisible();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('[data-app="explorer"]')).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'A little curiosity. A lot of possibility.' }),
@@ -106,6 +109,7 @@ test('command prompt implements filesystem, history, errors, and recovery', asyn
   await cmd.press('Enter');
   await expect(page.locator('.bsod')).toBeVisible();
   await page.getByRole('button', { name: 'Press ESC or click here to return' }).click();
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
   await expect(page.locator('.terminal')).toBeVisible();
 });
@@ -157,6 +161,7 @@ test('settings persist and can skip boot on subsequent visits', async ({ page })
   await settings.getByLabel('That old monitor feeling').uncheck();
   await settings.getByLabel('Take the scenic route? Maybe next time.').check();
   await page.reload();
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
   await expect(page.locator('.wallpaper')).toHaveClass(/night/);
   await expect(page.locator('.computer-screen')).not.toHaveClass(/crt-enabled/);
@@ -296,5 +301,6 @@ test('shutdown and power-on preserve saved settings', async ({ page }) => {
   await expect(page.locator('.boot-screen')).toBeVisible();
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
 });

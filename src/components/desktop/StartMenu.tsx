@@ -27,6 +27,7 @@ export default function StartMenu({
       sub: 'For the keyboard explorers',
       icon: 'terminal',
     },
+    { app: 'media', label: 'Media Player', sub: 'Your music and films', icon: 'drive' },
     { app: 'calculator', label: 'Calculator', sub: 'It all adds up', icon: 'calculator' },
   ];
   useEffect(() => {
@@ -104,7 +105,7 @@ export default function StartMenu({
                 {[
                   ...apps,
                   { app: 'game' as AppId, label: 'Memory Lane', icon: 'game' as IconName },
-                  ...(['snake', 'pong', 'minesweeper'] as AppId[]).map((app) => ({
+                  ...(['chess', 'snake', 'pong', 'minesweeper'] as AppId[]).map((app) => ({
                     app,
                     label: app[0].toUpperCase() + app.slice(1),
                     icon: 'game' as IconName,

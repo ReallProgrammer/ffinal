@@ -1,4 +1,6 @@
 import express from 'express';
+import { chessRoutes } from './chess-routes.mjs';
+import { mediaRoutes } from './media-routes.mjs';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -25,7 +27,8 @@ export function createApp({ db, s3, config }) {
         cb(null, !origin || config.origins.includes(origin));
       },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
+      exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
     }),
   );
   app.use(express.json({ limit: '64kb' }));
@@ -64,6 +67,8 @@ export function createApp({ db, s3, config }) {
     if (!(await session(req))) throw problem(401, 'Owner sign-in required.');
     next();
   };
+  chessRoutes(api, { db, owner, session, config });
+  mediaRoutes(api, { db, s3, owner, session, config });
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 1 },

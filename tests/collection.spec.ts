@@ -1,3 +1,4 @@
+import { passEntry } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import registry from '../server/src/object-types.json' with { type: 'json' };
@@ -86,6 +87,7 @@ test('all physical formats load actual surfaces, focus alone, return, and render
     await page.goto('/');
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
@@ -185,6 +187,7 @@ test('all physical formats load actual surfaces, focus alone, return, and render
     await page.reload();
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
@@ -222,6 +225,7 @@ test('certificate editor crops originals with a live 3D preview and saves metada
     await page.goto('/');
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');

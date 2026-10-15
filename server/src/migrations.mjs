@@ -72,6 +72,25 @@ export async function migrate(db) {
             OR (metadata->>'objectType' = 'ps5' AND NULLIF(metadata #>> '{presentation,casePreset}', '') IS NULL));
         INSERT INTO library_migrations(version) VALUES(6);`);
     }
+    if (!(await c.query('SELECT 1 FROM library_migrations WHERE version=7')).rowCount) {
+      await c.query(`CREATE TABLE chess_matches (
+        id uuid PRIMARY KEY, nickname varchar(40) NOT NULL, guest_hash char(64) NOT NULL,
+        status text NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting','active','finished','cancelled','expired')),
+        fen text NOT NULL, pgn text NOT NULL DEFAULT '', version integer NOT NULL DEFAULT 0,
+        result text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL);
+        CREATE INDEX chess_queue ON chess_matches(status,expires_at);
+        CREATE TABLE chess_push_subscriptions(endpoint text PRIMARY KEY, subscription jsonb NOT NULL);
+        CREATE TABLE media_items(id uuid PRIMARY KEY, title varchar(160) NOT NULL,
+          kind text NOT NULL CHECK(kind IN ('audio','video')), mime text NOT NULL,
+          object_key text, source_url text, bytes bigint NOT NULL DEFAULT 0,
+          published boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(),
+          CHECK((object_key IS NULL) <> (source_url IS NULL)));
+        ALTER TABLE chess_matches ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE chess_push_subscriptions ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE media_items ENABLE ROW LEVEL SECURITY;
+        INSERT INTO library_migrations(version) VALUES(7);`);
+    }
     // The API's table-owning DB role remains functional. Untrusted Data API roles get no policies.
     for (const table of ['books', 'assets', 'shelves', 'sessions', 'library_migrations'])
       await c.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);

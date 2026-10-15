@@ -1,0 +1,724 @@
+/* Focused additions to the existing desktop and application system. */
+.access-challenge {
+  min-height: 100%;
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: radial-gradient(ellipse at 20% 0, #214c6b, transparent 65%), #071822;
+  color: #e4f0df;
+  font-family: var(--modern);
+}
+.access-challenge section {
+  width: min(100%, 650px);
+  border: 1px solid #719d9b66;
+  background: #0a212bdf;
+  padding: 36px;
+  box-shadow: 0 28px 100px #0005;
+  border-radius: 12px;
+}
+.challenge-terminal-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font: 11px monospace;
+  color: #9db9ae;
+  border-bottom: 1px solid #9db9ae33;
+  padding-bottom: 20px;
+  margin-bottom: 30px;
+}
+.access-challenge h1 {
+  font:
+    64px/1.05 'Libre Caslon Display',
+    serif;
+  margin: 18px 0;
+}
+.access-challenge p {
+  line-height: 1.75;
+}
+.access-challenge .eyebrow {
+  color: #91bda7;
+  font-size: 10px;
+  margin-top: 20px;
+}
+.challenge-answers {
+  display: grid;
+  gap: 10px;
+  margin: 24px 0;
+}
+.access-challenge button {
+  padding: 14px 18px;
+  border: 1px solid #6b9f88;
+  background: #204c40;
+  color: #f0f6df;
+  text-align: left;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.access-challenge button:hover {
+  background: #32644f;
+}
+.access-challenge label {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+}
+.access-challenge input {
+  padding: 13px;
+  background: #04171f;
+  border: 1px solid #6b9f88;
+  color: #eaffd4;
+  font: 16px monospace;
+  width: 100%;
+  box-sizing: border-box;
+}
+.access-challenge small {
+  display: block;
+  margin-top: 20px;
+  color: #9cb4ae;
+  line-height: 1.5;
+}
+.captured-flag {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border: 1px dashed #99ca74;
+  border-radius: 6px;
+}
+.captured-flag p {
+  margin: 5px 0 15px;
+}
+.captured-flag code {
+  color: #cced91;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+.access-challenge [role='alert'] {
+  color: #ffcc9a;
+}
+.tray-popup {
+  z-index: 10020;
+  min-width: 220px;
+  max-width: min(320px, 90vw);
+}
+.tray-popup small {
+  line-height: 1.5;
+  display: block;
+}
+.tray-popup p {
+  line-height: 1.5;
+}
+.browser {
+  position: relative;
+}
+.security-lab-link {
+  margin: 20px 40px;
+  padding: 18px 20px;
+  border: 1px dashed #b6af90;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: #f6f0df;
+}
+.security-lab-link span,
+.security-lab-link small {
+  font-size: 10px;
+  color: #6e7366;
+}
+.security-lab-link button {
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  color: #86572e;
+  cursor: pointer;
+}
+.trojan-simulation {
+  position: absolute;
+  inset: 15px;
+  z-index: 100;
+  background: #111e27;
+  color: #d4e6d7;
+  box-shadow: 0 12px 50px #0008;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+  padding: 24px;
+  font-family: var(--modern);
+  border: 2px solid #88a48e;
+  border-radius: 8px;
+}
+.trojan-simulation header,
+.trojan-simulation footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.trojan-simulation header b {
+  font: 11px monospace;
+  letter-spacing: 2px;
+}
+.trojan-simulation button {
+  padding: 8px 12px;
+  border: 1px solid #7b9e85;
+  background: #294434;
+  color: #e8f4dd;
+  cursor: pointer;
+}
+.sim-shield {
+  font-size: 70px;
+  color: #f0b25f;
+  margin-top: 18px;
+}
+.sim-shield.clear {
+  color: #a4d281;
+}
+.trojan-simulation h2 {
+  font:
+    34px 'Libre Caslon Display',
+    serif;
+  margin: 8px 0;
+}
+.trojan-simulation p {
+  max-width: 540px;
+  text-align: center;
+  line-height: 1.6;
+}
+.trojan-simulation progress {
+  width: min(100%, 480px);
+  accent-color: #b9d78a;
+  margin: 15px 0;
+}
+.trojan-simulation ol {
+  list-style: none;
+  padding: 0;
+  width: min(100%, 480px);
+  font: 12px/2 monospace;
+}
+.trojan-simulation footer {
+  margin-top: auto;
+  font-size: 11px;
+  color: #a4bdab;
+  padding-top: 18px;
+}
+.chess-app,
+.media-player {
+  height: 100%;
+  overflow: auto;
+  background: #f1eedf;
+  color: #344d43;
+  font-family: var(--modern);
+  padding: 24px;
+  box-sizing: border-box;
+}
+.chess-app > header,
+.media-player > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.chess-app header small,
+.media-player header small {
+  letter-spacing: 2px;
+  font-size: 9px;
+}
+.chess-app h1 {
+  font:
+    42px/1.1 'Libre Caslon Display',
+    serif;
+  margin: 7px 0;
+}
+.chess-emblem {
+  font-size: 58px;
+  color: #ab8c45;
+}
+.chess-app h2,
+.media-player h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.chess-tabs {
+  display: flex;
+  gap: 5px;
+  border-bottom: 1px solid #c8c8b4;
+  padding-bottom: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.chess-tabs button {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 10px 14px !important;
+  color: #526a60 !important;
+}
+.chess-tabs button[aria-pressed='true'] {
+  background: #395b4c !important;
+  color: #fff !important;
+  border-radius: 4px;
+}
+.chess-app button,
+.media-player button,
+.os-owner-login button {
+  border: 1px solid #a9af98;
+  background: #faf9ef;
+  color: #385646;
+  padding: 8px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.chess-app button:disabled,
+.media-player button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.chess-app input,
+.chess-app select,
+.media-player input:not([type='checkbox']),
+.media-player select,
+.os-owner-login input {
+  padding: 8px;
+  border: 1px solid #adb69f;
+  background: #fffef6;
+  color: #30483f;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.chess-app label,
+.media-player label,
+.os-owner-login label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.chess-controls,
+.media-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 18px;
+}
+.chess-play-area {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 145px;
+  gap: 20px;
+}
+.app-chess .window-content {
+  container-type: size;
+}
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: min(560px, max(240px, calc(100cqh - 310px)));
+  border: 5px solid #465846;
+  box-shadow: 0 6px 16px #35463426;
+  box-sizing: border-box;
+}
+.chess-board button {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  touch-action: manipulation;
+  min-width: 0;
+  container-type: inline-size;
+  line-height: 1;
+}
+.chess-board button.light {
+  background: #e9dfc3;
+}
+.chess-board button.dark {
+  background: #66836a;
+}
+.chess-board button:disabled {
+  opacity: 1;
+}
+.chess-board button.selected {
+  background: #c1aa53;
+}
+.chess-board button.last-move {
+  box-shadow: inset 0 0 0 100px #dbc36a45;
+}
+.chess-board button.legal:after {
+  content: '';
+  position: absolute;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: #183f4670;
+  pointer-events: none;
+}
+.chess-board button.legal:has(.chess-piece:not(:empty)):after {
+  width: 85%;
+  height: 85%;
+  border: 3px solid #173e47;
+  background: none;
+  box-sizing: border-box;
+}
+.chess-board button.checked {
+  background: #b96552;
+}
+.chess-board button:focus-visible {
+  outline: 3px solid #175fd1;
+  outline-offset: -3px;
+  z-index: 1;
+}
+.chess-piece {
+  font-family: Georgia, 'DejaVu Sans', serif;
+  font-size: 76cqw;
+  line-height: 1;
+  filter: drop-shadow(0 2px 1px #0003);
+  pointer-events: none;
+}
+.white-piece {
+  color: #fff8dc;
+  text-shadow:
+    1px 0 #423e33,
+    -1px 0 #423e33,
+    0 1px #423e33,
+    0 -1px #423e33;
+}
+.black-piece {
+  color: #26352e;
+  text-shadow: 0 1px #bec5ad;
+}
+.rank-label,
+.file-label {
+  position: absolute;
+  font: 9px monospace;
+  color: #263e30;
+  pointer-events: none;
+}
+.rank-label {
+  left: 3px;
+  top: 3px;
+}
+.file-label {
+  right: 3px;
+  bottom: 2px;
+}
+.chess-status {
+  font-size: 13px;
+  padding: 10px 0;
+  min-height: 20px;
+}
+.chess-side-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #687d6b;
+}
+.chess-moves {
+  font-size: 12px;
+  padding-left: 24px;
+  max-height: 380px;
+  overflow: auto;
+}
+.chess-moves li {
+  padding: 6px 0;
+}
+.chess-moves li span {
+  display: inline-block;
+  width: 45%;
+}
+.chess-request {
+  padding: 18px;
+  border: 1px dashed #9fae90;
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chess-request p {
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.chess-dashboard {
+  border: 1px solid #bec5ae;
+  background: #e9ebdd;
+  padding: 16px;
+  margin-bottom: 15px;
+}
+.chess-dashboard small {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.chess-dashboard article {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid #bdc6b4;
+}
+.chess-dashboard article > div {
+  flex: 1;
+}
+.chess-dashboard article small {
+  display: block;
+}
+.chess-promotion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px;
+  background: #fff9e1;
+  border: 2px solid #a28537;
+}
+.chess-promotion b {
+  width: 100%;
+}
+.os-owner-login {
+  max-width: 400px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #b4bca7;
+  display: grid;
+  gap: 15px;
+  background: #f4f1e4;
+}
+.os-owner-login p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.os-owner-login label {
+  display: grid;
+  gap: 6px;
+}
+.os-error {
+  padding: 12px;
+  color: #8c342e;
+  background: #fff0e4;
+  border-left: 3px solid #b36447;
+  line-height: 1.6;
+  font-size: 12px;
+}
+.os-error button {
+  margin-left: 10px;
+}
+.media-player {
+  background: #e8e9df;
+}
+.media-player > header {
+  justify-content: flex-start;
+}
+.media-player h1 {
+  font:
+    30px/1.1 'Libre Caslon Display',
+    serif;
+  margin: 5px 0;
+}
+.media-stage {
+  background: radial-gradient(ellipse at top, #294b53, #111b25);
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #09202c;
+  border-radius: 7px;
+  overflow: hidden;
+  color: #d9e7d7;
+  box-shadow: inset 0 0 40px #0003;
+}
+.media-album {
+  padding: 30px;
+  text-align: center;
+}
+.media-album h2 {
+  font:
+    26px 'Libre Caslon Display',
+    serif;
+  margin: 15px 0 5px;
+}
+.media-album p {
+  font-size: 11px;
+  color: #b6c5b7;
+}
+.media-stage audio {
+  width: calc(100% - 24px);
+  margin: 0 12px 15px;
+}
+.media-stage video {
+  width: 100%;
+  max-height: 420px;
+  display: block;
+  background: #0a0c0f;
+}
+.media-controls {
+  justify-content: center;
+  padding: 5px;
+}
+.media-controls label {
+  font-size: 12px;
+}
+.media-add {
+  padding: 16px;
+  background: #f5f5e9;
+  border: 1px solid #bec4b0;
+  margin: 16px 0;
+  display: grid;
+  gap: 12px;
+}
+.media-add form {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #bcc2af;
+  padding-top: 14px;
+}
+.media-add label:not(:has(input[type='checkbox'])) {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.media-add small {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.media-playlist {
+  list-style: none;
+  padding: 0;
+}
+.media-playlist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #c8ccbd;
+  padding: 5px 0;
+}
+.media-playlist li > button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+}
+.media-playlist li > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.media-playlist li > button[aria-pressed='true'] {
+  background: #d7dfc8;
+}
+.media-playlist li > div {
+  display: flex;
+  gap: 6px;
+}
+.media-playlist small {
+  font-size: 10px;
+  color: #718066;
+}
+.media-empty {
+  text-align: center;
+  color: #6a7c69;
+  font-size: 13px;
+  padding: 20px;
+}
+@media (max-width: 600px) {
+  .system-tray > button:nth-child(2) {
+    display: inline-flex;
+    align-items: center;
+  }
+  .chess-board {
+    max-width: min(100%, max(240px, calc(100cqh - 260px)));
+    margin-inline: auto;
+  }
+  .chess-app > header {
+    margin-bottom: 10px;
+  }
+  .chess-emblem {
+    font-size: 42px;
+  }
+  .chess-app .chess-tabs {
+    margin-bottom: 10px;
+  }
+  .chess-app .chess-controls {
+    margin: 8px 0 12px;
+  }
+
+  .access-challenge {
+    padding: 15px;
+  }
+  .access-challenge section {
+    padding: 22px;
+  }
+  .access-challenge h1 {
+    font-size: 48px;
+  }
+  .challenge-terminal-bar {
+    font-size: 9px;
+  }
+  .chess-app,
+  .media-player {
+    padding: 14px;
+  }
+  .chess-play-area {
+    grid-template-columns: 1fr;
+  }
+  .chess-play-area aside {
+    display: none;
+  }
+  .chess-app h1 {
+    font-size: 28px;
+  }
+  .chess-tabs button {
+    padding: 9px !important;
+    font-size: 11px;
+  }
+  .security-lab-link {
+    margin: 15px;
+  }
+  .trojan-simulation {
+    inset: 5px;
+    padding: 15px;
+  }
+  .trojan-simulation h2 {
+    font-size: 26px;
+  }
+  .media-playlist li {
+    flex-wrap: wrap;
+  }
+  .media-playlist li > button {
+    min-width: 100%;
+  }
+  .chess-dashboard article {
+    flex-wrap: wrap;
+  }
+  .chess-request label input {
+    width: 100%;
+  }
+  .media-add input {
+    width: 100%;
+  }
+  .media-add input[type='checkbox'] {
+    width: auto;
+  }
+}
+
+.chess-alert-status {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  background: #e3e9d8;
+  border-left: 3px solid #66836a;
+  font-size: 12px;
+  line-height: 1.6;
+}

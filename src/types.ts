@@ -28,6 +28,8 @@ export type AppId =
   | 'game'
   | 'dialog'
   | 'shelf'
+  | 'chess'
+  | 'media'
   | 'games'
   | 'snake'
   | 'pong'

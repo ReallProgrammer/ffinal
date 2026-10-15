@@ -51,3 +51,26 @@ for (const style of ['true', 'false']) {
     }
   });
 }
+test('Telegram configuration validates the token, chat ID and frontend deep-link origin', () => {
+  const valid = {
+    ...env,
+    TELEGRAM_BOT_TOKEN: '123:TEST_ONLY',
+    TELEGRAM_CHAT_ID: '12345',
+    CHESS_SITE_URL: 'https://example.test/ffinal/',
+  };
+  assert.equal(configuration(valid).telegramChatId, '12345');
+  assert.throws(
+    () => configuration({ ...valid, TELEGRAM_BOT_TOKEN: 'wrong' }),
+    /Invalid TELEGRAM_BOT_TOKEN/,
+  );
+  assert.throws(() => configuration({ ...valid, TELEGRAM_CHAT_ID: 'username' }), /numeric chat ID/);
+  assert.throws(
+    () => configuration({ ...valid, CHESS_SITE_URL: 'https://other.test/' }),
+    /HTTPS frontend URL/,
+  );
+  assert.throws(
+    () => configuration({ ...valid, CHESS_SITE_URL: 'https://secret@example.test/' }),
+    /HTTPS frontend URL/,
+  );
+  assert.equal(configuration(env).telegramBotToken, '');
+});

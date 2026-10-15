@@ -1,3 +1,4 @@
+import { passEntry } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
@@ -5,6 +6,7 @@ async function shelf(page: Page) {
   await page.goto('/');
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
   await page.locator('.run-app input').fill('shelf');
@@ -160,6 +162,7 @@ test('owner uploads, previews, publishes, reads, edits and signs out of the pers
     await page.reload();
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  lazy,
+  Suspense,
+} from 'react';
 import { Volume2, VolumeX, Wifi, X, Info, Monitor, RotateCw } from 'lucide-react';
 import type { AppId, FileEntry, IconName, Settings, WindowData } from './types';
 import { DesktopContext } from './lib/DesktopContext';
@@ -8,6 +17,7 @@ import { machineReducer } from './lib/machine';
 import type { MachineState } from './lib/machine';
 import { LinuxFilesystem } from './lib/linux';
 import SystemScreens from './components/system/SystemScreens';
+import AccessChallenge from './components/system/AccessChallenge';
 import LinuxTerminal from './components/system/LinuxTerminal';
 import Wallpaper from './components/desktop/Wallpaper';
 import DesktopIcons from './components/desktop/DesktopIcons';
@@ -30,6 +40,8 @@ import TaskManager, { HelpCenter } from './components/applications/TaskManager';
 import { DialogApp, Game, RunApp, SearchApp } from './components/applications/Utilities';
 import { getFile, createFile, children, fileClipboard, pasteFiles } from './data/filesystem';
 import { shelfRepository, isSafeImage } from './lib/shelf/repository';
+const ChessApp = lazy(() => import('./components/games/Chess'));
+const MediaPlayer = lazy(() => import('./components/applications/MediaPlayer'));
 const defaults: Settings = {
   sound: true,
   volume: 0.55,
@@ -54,6 +66,8 @@ const meta: Record<AppId, { title: string; icon: IconName; width: number; height
   game: { title: 'Memory Lane', icon: 'game', width: 430, height: 585 },
   dialog: { title: 'Personal Computer', icon: 'computer', width: 440, height: 255 },
   shelf: { title: 'My Shelf · The collection room', icon: 'certificate', width: 980, height: 740 },
+  chess: { title: 'Chess Club', icon: 'game', width: 820, height: 760 },
+  media: { title: 'Media Player', icon: 'drive', width: 720, height: 730 },
   games: { title: 'Games', icon: 'game', width: 650, height: 565 },
   snake: { title: 'Snake', icon: 'game', width: 520, height: 570 },
   pong: { title: 'Pong', icon: 'game', width: 690, height: 535 },
@@ -86,6 +100,8 @@ function initialWindow(
   };
 }
 function firstWindows() {
+  if (new URLSearchParams(location.search).get('chess') === 'owner')
+    return [initialWindow('chess', 'chess-owner', 3, { owner: 'true' })];
   const main = initialWindow('explorer', 'welcome', 3);
   main.x = Math.max(125, (innerWidth - 850) / 2 - 5);
   main.y = Math.max(28, (innerHeight - main.height) / 2 - 25);
@@ -150,7 +166,14 @@ export default function App() {
   const [toast, setToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [clock, setClock] = useState(new Date());
-  const [volumeOpen, setVolumeOpen] = useState(false);
+  const [tray, setTray] = useState<'volume' | 'network' | 'calendar' | null>(null);
+  const [entryPassed, setEntryPassed] = useState(() => {
+    try {
+      return sessionStorage.getItem('pc-entry-flag') === 'passed';
+    } catch {
+      return false;
+    }
+  });
   const [power, setPower] = useState(false);
   const [showDesktop, setShowDesktop] = useState(false);
   const desktopHiddenIds = useRef<Set<string>>(new Set());
@@ -294,7 +317,7 @@ export default function App() {
     setPower(false);
     setStart(false);
     setContext(null);
-    setVolumeOpen(false);
+    setTray(null);
     setSwitcher(null);
     setSelected([]);
     setStandby(false);
@@ -375,7 +398,7 @@ export default function App() {
         dispatch({ type: 'GO', phase: 'WINDOWS_DESKTOP' });
         return;
       }
-      if (stage !== 'WINDOWS_DESKTOP') return;
+      if (stage !== 'WINDOWS_DESKTOP' || !entryPassed) return;
       if (standby) {
         setStandby(false);
         return;
@@ -412,13 +435,14 @@ export default function App() {
       }
       if (e.ctrlKey && !e.shiftKey && e.key === 'Escape') {
         e.preventDefault();
+        setTray(null);
         setStart((v) => !v);
         return;
       }
       if (e.key === 'Escape') {
         setStart(false);
         setContext(null);
-        setVolumeOpen(false);
+        setTray(null);
         setPower(false);
         setSwitcher(null);
         switcherRef.current = null;
@@ -459,8 +483,9 @@ export default function App() {
       }
     };
     const up = (e: KeyboardEvent) => {
-      if (stage !== 'WINDOWS_DESKTOP') return;
+      if (stage !== 'WINDOWS_DESKTOP' || !entryPassed) return;
       if (e.key === 'Meta' && metaOnly.current) {
+        setTray(null);
         setStart((v) => !v);
         metaOnly.current = false;
       }
@@ -477,7 +502,7 @@ export default function App() {
       window.removeEventListener('keydown', key);
       window.removeEventListener('keyup', up);
     };
-  }, [stage, windows, activeId, close, focus, launch, notify, standby]);
+  }, [stage, windows, activeId, close, focus, launch, notify, standby, entryPassed]);
   const desktopContext = useMemo(
     () => ({
       launch,
@@ -515,14 +540,14 @@ export default function App() {
   const handleDesktop = (e: React.MouseEvent) => {
     if (
       (e.target as HTMLElement).closest(
-        '.os-window,.desktop-icon,.taskbar,.start-menu,.context-menu',
+        '.os-window,.desktop-icon,.taskbar,.start-menu,.context-menu,.tray-popup',
       )
     )
       return;
     setDesktopFocused(true);
     setStart(false);
     setContext(null);
-    setVolumeOpen(false);
+    setTray(null);
   };
   const desktopToggle = () => {
     if (!showDesktop) {
@@ -582,6 +607,18 @@ export default function App() {
             initialView={w.params.view === 'archive' ? 'archive' : 'library'}
           />
         );
+      case 'chess':
+        return (
+          <Suspense fallback={<p>Opening Chess Club…</p>}>
+            <ChessApp ownerView={w.params.owner === 'true'} />
+          </Suspense>
+        );
+      case 'media':
+        return (
+          <Suspense fallback={<p>Opening Media Player…</p>}>
+            <MediaPlayer />
+          </Suspense>
+        );
       case 'games':
         return <Games />;
       case 'snake':
@@ -601,6 +638,7 @@ export default function App() {
       <div
         className={`computer-screen ${settings.crt && !machine.safeMode ? 'crt-enabled' : ''} ${reduced ? 'reduce-motion' : ''} ${busy ? 'system-busy' : ''}`}
         onPointerDownCapture={(e) => {
+          if (!(e.target as HTMLElement).closest('.tray-popup,.system-tray')) setTray(null);
           unlockAudio();
           audioUnlocked.current = true;
           setUnlocked(true);
@@ -633,7 +671,19 @@ export default function App() {
             <p>Saving your settings. Closing this session.</p>
           </div>
         )}
-        {stage === 'WINDOWS_DESKTOP' && (
+        {stage === 'WINDOWS_DESKTOP' && !entryPassed && (
+          <AccessChallenge
+            onPass={() => {
+              setEntryPassed(true);
+              try {
+                sessionStorage.setItem('pc-entry-flag', 'passed');
+              } catch {
+                /* Session remains usable without storage. */
+              }
+            }}
+          />
+        )}
+        {stage === 'WINDOWS_DESKTOP' && entryPassed && (
           <div
             className="desktop"
             onClick={handleDesktop}
@@ -755,8 +805,8 @@ export default function App() {
                 </button>
               </div>
             )}
-            {volumeOpen && (
-              <div className="volume-popup">
+            {tray === 'volume' && (
+              <div className="volume-popup tray-popup">
                 <b>Volume</b>
                 <label>
                   <Volume2 size={18} />
@@ -780,6 +830,29 @@ export default function App() {
                 </label>
               </div>
             )}
+            {tray === 'network' && (
+              <div className="volume-popup tray-popup" role="dialog" aria-label="Network status">
+                <b>Network connection</b>
+                <p>{navigator.onLine ? 'Browser is online' : 'Browser is offline'}</p>
+                <small>
+                  Local games and files work offline. Online chess and shared media require the
+                  server.
+                </small>
+              </div>
+            )}
+            {tray === 'calendar' && (
+              <div className="volume-popup tray-popup" role="dialog" aria-label="Calendar">
+                <b>{clock.toLocaleDateString(undefined, { weekday: 'long' })}</b>
+                <p>
+                  {clock.toLocaleDateString(undefined, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </p>
+                <time>{clock.toLocaleTimeString()}</time>
+              </div>
+            )}
             <footer className="taskbar">
               <button
                 className={`start-button ${start ? 'pressed' : ''}`}
@@ -788,7 +861,7 @@ export default function App() {
                 onClick={() => {
                   setStart(!start);
                   setContext(null);
-                  setVolumeOpen(false);
+                  setTray(null);
                   beep('click');
                 }}
               >
@@ -837,18 +910,22 @@ export default function App() {
                 <button
                   title={settings.sound ? 'Sound settings' : 'Sound is muted'}
                   aria-label="Volume settings"
-                  onClick={() => setVolumeOpen(!volumeOpen)}
+                  aria-expanded={tray === 'volume'}
+                  onClick={() => {
+                    setStart(false);
+                    setTray((v) => (v === 'volume' ? null : 'volume'));
+                  }}
                 >
                   {settings.sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
                 </button>
                 <button
                   aria-label="Connection status"
                   title="Connection status"
-                  onClick={() =>
-                    notify(
-                      'Connected to your imagination.\nLocal apps are ready; external links need an internet connection.',
-                    )
-                  }
+                  aria-expanded={tray === 'network'}
+                  onClick={() => {
+                    setStart(false);
+                    setTray((v) => (v === 'network' ? null : 'network'));
+                  }}
                 >
                   <Wifi size={16} />
                 </button>
@@ -860,18 +937,12 @@ export default function App() {
                     month: 'long',
                     day: 'numeric',
                   })}
-                  onClick={() =>
-                    notify(
-                      clock.toLocaleString(undefined, {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      }),
-                    )
-                  }
+                  aria-label="Date and time"
+                  aria-expanded={tray === 'calendar'}
+                  onClick={() => {
+                    setStart(false);
+                    setTray((v) => (v === 'calendar' ? null : 'calendar'));
+                  }}
                 >
                   {clock.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
                 </button>

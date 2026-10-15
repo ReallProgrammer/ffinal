@@ -337,6 +337,10 @@ export default function DesktopIcons({
           marquee.current = null;
           setSelection(null);
         }}
+        onLostPointerCapture={() => {
+          marquee.current = null;
+          setSelection(null);
+        }}
         onPointerCancel={() => {
           marquee.current = null;
           setSelection(null);
@@ -502,6 +506,10 @@ export default function DesktopIcons({
                   drag.current = null;
                   setDragging(false);
                   setDropTarget('');
+                }}
+                onLostPointerCapture={() => {
+                  marquee.current = null;
+                  setSelection(null);
                 }}
                 onPointerCancel={() => {
                   drag.current = null;

@@ -8,6 +8,7 @@ import '@fontsource/dm-sans/latin-700.css';
 import '@fontsource/libre-caslon-display/latin-400.css';
 import './styles.css';
 import './behaviors.css';
+import './os-extras.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

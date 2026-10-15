@@ -19,7 +19,27 @@ export function configuration(env = process.env) {
     throw new Error('Production frontend origins require HTTPS.');
   if (env.S3_FORCE_PATH_STYLE && !['true', 'false'].includes(env.S3_FORCE_PATH_STYLE))
     throw new Error('S3_FORCE_PATH_STYLE must be true or false.');
+  if (env.TELEGRAM_BOT_TOKEN && !/^\d+:[\w-]+$/.test(env.TELEGRAM_BOT_TOKEN))
+    throw new Error('Invalid TELEGRAM_BOT_TOKEN format.');
+  if (env.TELEGRAM_CHAT_ID && !/^-?\d+$/.test(env.TELEGRAM_CHAT_ID))
+    throw new Error('TELEGRAM_CHAT_ID must be a numeric chat ID.');
+  if (env.CHESS_SITE_URL) {
+    const site = new URL(env.CHESS_SITE_URL);
+    if (
+      site.protocol !== 'https:' ||
+      site.username ||
+      site.password ||
+      !origins.includes(site.origin)
+    )
+      throw new Error('CHESS_SITE_URL must be an HTTPS frontend URL without credentials.');
+  }
   return {
+    telegramBotToken: env.TELEGRAM_BOT_TOKEN || '',
+    telegramChatId: env.TELEGRAM_CHAT_ID || '',
+    chessSiteUrl: env.CHESS_SITE_URL || '',
+    vapidPublicKey: env.VAPID_PUBLIC_KEY || '',
+    vapidPrivateKey: env.VAPID_PRIVATE_KEY || '',
+    vapidSubject: env.VAPID_SUBJECT || '',
     databaseUrl: env.DATABASE_URL,
     bucket: env.S3_BUCKET,
     endpoint: env.S3_ENDPOINT || undefined,

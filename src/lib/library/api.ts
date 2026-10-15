@@ -35,12 +35,14 @@ export function bookInput(book: LibraryBook): BookInput {
     digital: digital?.id || null,
   };
 }
-async function request(path: string, options: RequestInit = {}) {
-  if (!base) throw new Error('The library service has not been connected.');
+export async function serviceRequest(path: string, options: RequestInit = {}) {
+  if (!base) throw new Error('The online service has not been connected.');
   const response = await fetch(base + path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !(options.body instanceof FormData)
+        ? { 'Content-Type': 'application/json' }
+        : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -56,7 +58,7 @@ async function request(path: string, options: RequestInit = {}) {
   return response;
 }
 async function mutation(path: string, method: string, body?: unknown) {
-  const response = await request(path, {
+  const response = await serviceRequest(path, {
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -67,18 +69,21 @@ export const libraryApi: LibraryRepository = {
   configured: Boolean(base),
   isOwner: () => Boolean(token),
   async list(owner = false) {
-    return (await request(owner ? '/admin/collection' : '/collection')).json();
+    return (await serviceRequest(owner ? '/admin/collection' : '/collection')).json();
   },
   async login(email, password) {
     const result = await (
-      await request('/session', { method: 'POST', body: JSON.stringify({ email, password }) })
+      await serviceRequest('/session', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
     ).json();
     token = result.token;
     changed();
   },
   async logout() {
     try {
-      await request('/session', { method: 'DELETE' });
+      await serviceRequest('/session', { method: 'DELETE' });
     } finally {
       token = '';
       changed();
@@ -125,19 +130,22 @@ export const libraryApi: LibraryRepository = {
   },
   async texture(id, signal, quality = 'overview') {
     return (
-      await request(`/assets/${encodeURIComponent(id)}?quality=${quality}`, { signal })
+      await serviceRequest(`/assets/${encodeURIComponent(id)}?quality=${quality}`, { signal })
     ).blob();
   },
   async original(id) {
-    return (await request(`/assets/${id}?original=1`)).blob();
+    return (await serviceRequest(`/assets/${id}?original=1`)).blob();
   },
   async crop(id, crop) {
     return (
-      await request(`/admin/assets/${id}/crop`, { method: 'POST', body: JSON.stringify(crop) })
+      await serviceRequest(`/admin/assets/${id}/crop`, {
+        method: 'POST',
+        body: JSON.stringify(crop),
+      })
     ).json();
   },
   async read(book, role) {
-    return (await request(`/books/${book.id}/read${role ? '?role=manual' : ''}`)).blob();
+    return (await serviceRequest(`/books/${book.id}/read${role ? '?role=manual' : ''}`)).blob();
   },
   async save(book) {
     const response = await mutation(
@@ -177,14 +185,14 @@ export const libraryApi: LibraryRepository = {
   },
   async split(id, panels) {
     return (
-      await request(`/admin/assets/${id}/split`, {
+      await serviceRequest(`/admin/assets/${id}/split`, {
         method: 'POST',
         body: JSON.stringify({ panels }),
       })
     ).json();
   },
   async orphanAssets() {
-    return (await request('/admin/assets')).json();
+    return (await serviceRequest('/admin/assets')).json();
   },
   async removeAsset(id) {
     await mutation(`/admin/assets/${id}`, 'DELETE');

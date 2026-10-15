@@ -11,6 +11,8 @@
   scroll-behavior: auto !important;
 }
 .desktop-surface {
+  isolation: isolate;
+  z-index: 0;
   pointer-events: auto;
   touch-action: none;
 }

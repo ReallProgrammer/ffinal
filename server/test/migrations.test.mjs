@@ -129,12 +129,12 @@ test(
         assert.equal(saved.metadata.title, metadata.title);
         assert.equal(saved.metadata.objectType, 'book');
         assert.equal(saved.metadata.presentation.textOverlay, false);
-        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 5);
+        assert.equal((await c2.query('SELECT * FROM library_migrations')).rowCount, 6);
         const policies = await c2.query(
-          "SELECT relrowsecurity FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace WHERE nspname=$1 AND relname IN ('assets','books','shelves','sessions')",
+          "SELECT relrowsecurity FROM pg_class JOIN pg_namespace ON pg_namespace.oid=relnamespace WHERE nspname=$1 AND relname IN ('assets','books','shelves','sessions','chess_matches','chess_push_subscriptions','media_items')",
           [schema],
         );
-        assert.equal(policies.rowCount, 4);
+        assert.equal(policies.rowCount, 7);
         assert.ok(policies.rows.every((r) => r.relrowsecurity));
       } finally {
         c2.release(true);

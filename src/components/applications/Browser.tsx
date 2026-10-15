@@ -14,12 +14,14 @@ import { useDesktop } from '../../lib/DesktopContext';
 import type { WindowData } from '../../types';
 import Icon from '../Icon';
 import MenuBar from '../MenuBar';
+import TrojanSimulation from './TrojanSimulation';
 const pages = ['home', 'projects', 'about', 'contact'];
 export default function Browser({ window: w }: { window: WindowData }) {
   const [history, setHistory] = useState([w.params.page || 'home']);
   const [index, setIndex] = useState(0);
   const [address, setAddress] = useState(`portfolio://${history[0]}`);
   const [loading, setLoading] = useState(false);
+  const [simulation, setSimulation] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { launch, notify } = useDesktop();
   const page = history[index];
@@ -70,6 +72,7 @@ export default function Browser({ window: w }: { window: WindowData }) {
   };
   return (
     <div className="browser app-column">
+      {simulation && <TrojanSimulation onClose={() => setSimulation(false)} />}
       <MenuBar
         menus={[
           {
@@ -203,6 +206,13 @@ export default function Browser({ window: w }: { window: WindowData }) {
                 See what I’m working on <ArrowUpRight size={17} />
               </button>
               <div className="web-orbit">✳</div>
+            </div>
+            <div className="security-lab-link">
+              <span>CURIOUS ABOUT CYBERSECURITY?</span>
+              <button onClick={() => setSimulation(true)}>
+                Suspicious link: free_screensaver.exe ↗
+              </button>
+              <small>Try the harmless Trojan simulation.</small>
             </div>
             <div className="web-marquee">
               THINK · TINKER · BREAK · LEARN · BUILD · REPEAT · THINK · TINKER · BREAK · LEARN

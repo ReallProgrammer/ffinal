@@ -5,6 +5,12 @@ import Icon from '../Icon';
 import { useDesktop } from '../../lib/DesktopContext';
 import type { AppId } from '../../types';
 const games: { id: AppId; name: string; description: string; symbol: string }[] = [
+  {
+    id: 'chess',
+    name: 'Chess',
+    description: 'A bot, a challenge, or a match with the owner.',
+    symbol: '♞',
+  },
   { id: 'snake', name: 'Snake', description: 'Just one more apple.', symbol: '▰' },
   { id: 'pong', name: 'Pong', description: 'A classic back-and-forth.', symbol: '▌·▐' },
   { id: 'minesweeper', name: 'Minesweeper', description: 'Watch your step.', symbol: '✹' },
@@ -24,7 +30,7 @@ export default function Games() {
         <div>
           <span className="eyebrow">ACCESSORIES / GAMES</span>
           <h1>A little time well wasted.</h1>
-          <p>Four familiar reasons to take a break.</p>
+          <p>Five familiar reasons to take a break.</p>
         </div>
       </header>
       <div className="games-grid">

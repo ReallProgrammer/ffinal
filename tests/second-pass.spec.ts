@@ -1,3 +1,4 @@
+import { passEntry } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
@@ -16,6 +17,7 @@ async function boot(page: Page) {
 async function desktop(page: Page) {
   await boot(page);
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
 }
 async function run(page: Page, app: string) {
@@ -45,6 +47,7 @@ test('normal full boot starts black, progresses through POST and loading, then d
   await expect(page.locator('[data-system-mode="BIOS"]')).toBeVisible({ timeout: 4000 });
   await expect(page.locator('.post-diagnostics')).toContainText('Initializing system firmware');
   await expect(page.locator('[data-system-mode="OS_LOADING"]')).toBeVisible({ timeout: 13000 });
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible({ timeout: 6000 });
 });
 
@@ -62,6 +65,7 @@ test('ESC opens setup, F10 confirms settings, and reboot closes the old session'
   await expect(page.locator('[data-system-mode="SHUTDOWN"]')).toBeVisible();
   await expect(page.locator('[data-system-mode="BOOT"]')).toBeVisible();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem('pc-settings') || '{}').crt),
@@ -116,6 +120,7 @@ test('secret Linux boot supports real file commands, pipes, Snake and reboot', a
   await expect(page.locator('[data-system-mode="SHUTDOWN"]')).toBeVisible();
   await expect(page.locator('[data-system-mode="BOOT"]')).toBeVisible();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.desktop')).toBeVisible();
   await expect(page.locator('.linux-terminal')).toHaveCount(0);
 });
@@ -352,6 +357,7 @@ test('Recovery clears temporary files, resets icons, and starts Safe Mode withou
   await page.getByRole('button', { name: 'Reset Desktop', exact: true }).click();
   await page.getByRole('button', { name: 'Safe Mode', exact: true }).click();
   await page.keyboard.press('Enter');
+  await passEntry(page);
   await expect(page.locator('.safe-mode-label')).toBeVisible();
   await expect(page.locator('.computer-screen')).not.toHaveClass(/crt-enabled/);
 });

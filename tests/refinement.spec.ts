@@ -1,3 +1,4 @@
+import { passEntry } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 test('owner saves wrap art, layers, interior files and exact placement; visitors browse a separate photo gallery', async ({
@@ -20,6 +21,7 @@ test('owner saves wrap art, layers, interior files and exact placement; visitors
     await page.goto('/');
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
@@ -472,6 +474,7 @@ test('visitors combine and remove independent genre filters', async ({ page, con
     await page.goto('/');
     await page.locator('.boot-screen').waitFor();
     await page.keyboard.press('Enter');
+    await passEntry(page);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.locator('.start-menu').getByRole('button', { name: 'Run…', exact: true }).click();
     await page.locator('.run-app input').fill('shelf');
