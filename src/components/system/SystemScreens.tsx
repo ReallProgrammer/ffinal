@@ -356,7 +356,7 @@ function BiosSetup({
         : draft.skipBoot
           ? '[Enabled]'
           : '[Disabled]';
-    if (tab === 3) return i === 0 ? '[Guest access]' : '[Local IndexedDB]';
+    if (tab === 3) return i === 0 ? '[Guest access]' : '[Session files]';
     if (tab === 4)
       return i === 3
         ? `[${Math.round(draft.volume * 100)}%]`

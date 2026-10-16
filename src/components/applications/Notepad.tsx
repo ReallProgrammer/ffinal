@@ -43,7 +43,7 @@ export default function Notepad({ window: w, active }: { window: WindowData; act
         return;
       }
       setSaved(text);
-      notify(`“${name}” saved on this computer.`);
+      notify(`“${name}” saved for this session.`);
     } else {
       downloadText(name, text);
       notify('Browser storage is unavailable. Your text was downloaded instead.');
@@ -191,7 +191,7 @@ export default function Notepad({ window: w, active }: { window: WindowData; act
                 label: 'About Notepad',
                 action: () =>
                   notify(
-                    'Notepad — A little space for big ideas. Save keeps notes in this browser; Save As also downloads a copy.',
+                    'Notepad — A little space for big ideas. Save keeps notes until this page is refreshed or closed. Save As also downloads a copy.',
                   ),
               },
             ],

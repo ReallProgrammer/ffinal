@@ -1,3 +1,5 @@
+import { resetFileLayout } from './data/filesystem';
+import { libraryApi } from './lib/library/api';
 import {
   useCallback,
   useEffect,
@@ -12,12 +14,13 @@ import { Volume2, VolumeX, Wifi, X, Info, Monitor, RotateCw } from 'lucide-react
 import type { AppId, FileEntry, IconName, Settings, WindowData } from './types';
 import { DesktopContext } from './lib/DesktopContext';
 import { playSound, setAudioVolume, startBootAmbience, unlockAudio } from './lib/sound';
-import { readStorage, writeStorage } from './lib/storage';
+import { clearTemporaryStorage, removeStorage, readStorage, writeStorage } from './lib/storage';
 import { machineReducer } from './lib/machine';
 import type { MachineState } from './lib/machine';
 import { LinuxFilesystem } from './lib/linux';
 import SystemScreens from './components/system/SystemScreens';
 import LinuxTerminal from './components/system/LinuxTerminal';
+import AccountChooser from './components/system/AccountChooser';
 import Wallpaper from './components/desktop/Wallpaper';
 import DesktopIcons from './components/desktop/DesktopIcons';
 import Window from './components/desktop/Window';
@@ -168,11 +171,15 @@ export default function App() {
   const [tray, setTray] = useState<'volume' | 'network' | 'calendar' | null>(null);
   const [entryPassed, setEntryPassed] = useState(() => {
     try {
-      return sessionStorage.getItem('pc-ui-started') === 'yes';
+      return (
+        sessionStorage.getItem('pc-ui-started') === 'yes' &&
+        sessionStorage.getItem('pc-ui-account') === 'guest'
+      );
     } catch {
       return false;
     }
   });
+  const [accountPicking, setAccountPicking] = useState(false);
   const [power, setPower] = useState(false);
   const [showDesktop, setShowDesktop] = useState(false);
   const desktopHiddenIds = useRef<Set<string>>(new Set());
@@ -295,7 +302,7 @@ export default function App() {
       if (
         windows.some((w) => w.app === 'notepad' && w.title.startsWith('*')) &&
         !window.confirm(
-          'Discard unsaved notes and restart? Saved files and Shelf objects are kept.',
+          'Discard your temporary files and restart? Your published collection is kept.',
         )
       )
         return;
@@ -313,6 +320,18 @@ export default function App() {
   useEffect(() => {
     if (stage !== 'SHUTDOWN') return;
     setWindows([]);
+    setEntryPassed(false);
+    setAccountPicking(false);
+    for (const key of ['pc-terminal-flag', 'pc-ui-started', 'pc-ui-account']) {
+      try {
+        sessionStorage.removeItem(key);
+      } catch {
+        /* Current UI still resets. */
+      }
+    }
+    clearTemporaryStorage();
+    resetFileLayout();
+    void libraryApi.logout().catch(() => {});
     setPower(false);
     setStart(false);
     setContext(null);
@@ -331,7 +350,7 @@ export default function App() {
   const resetDesktop = useCallback(() => {
     ['pc-icon-labels', 'pc-icon-positions', 'pc-desktop-hidden'].forEach((key) => {
       try {
-        localStorage.removeItem(key);
+        removeStorage(key);
       } catch {
         /* Best effort when storage is disabled. */
       }
@@ -660,16 +679,27 @@ export default function App() {
             unlocked={unlocked}
           />
         )}
-        {(stage === 'LINUX_TERMINAL' || (stage === 'WINDOWS_DESKTOP' && !entryPassed)) && (
-          <LinuxTerminal
-            reboot={linuxReboot}
-            shutdown={shutdown}
-            onStartUI={() => {
+        {!accountPicking &&
+          (stage === 'LINUX_TERMINAL' || (stage === 'WINDOWS_DESKTOP' && !entryPassed)) && (
+            <LinuxTerminal
+              reboot={linuxReboot}
+              shutdown={shutdown}
+              onStartUI={() => {
+                setAccountPicking(true);
+              }}
+            />
+          )}
+        {accountPicking && (
+          <AccountChooser
+            onBack={() => setAccountPicking(false)}
+            onSelect={(account) => {
+              setAccountPicking(false);
               setEntryPassed(true);
               try {
                 sessionStorage.setItem('pc-ui-started', 'yes');
+                sessionStorage.setItem('pc-ui-account', account);
               } catch {
-                /* active session stays usable */
+                /* The active session remains usable. */
               }
               dispatch({ type: 'START_UI' });
             }}
@@ -1024,7 +1054,7 @@ export default function App() {
             <Icon name="computer" size={70} />
             <h1>It’s now safe to turn off your computer.</h1>
             <p>Thanks for stopping by. Stay curious.</p>
-            <button onClick={restart}>
+            <button onClick={() => dispatch({ type: 'POWER_ON' })}>
               <Icon name="power" size={25} /> Power on
             </button>
           </div>

@@ -72,7 +72,14 @@ export default function Browser({ window: w }: { window: WindowData }) {
   };
   return (
     <div className="browser app-column">
-      {simulation && <TrojanSimulation onClose={() => setSimulation(false)} />}
+      {simulation && (
+        <TrojanSimulation
+          onClose={() => {
+            setSimulation(false);
+            notify('Security exercise ended. No files were downloaded or changed.');
+          }}
+        />
+      )}
       <MenuBar
         menus={[
           {
@@ -179,7 +186,8 @@ export default function Browser({ window: w }: { window: WindowData }) {
       <div className={`browser-page ${loading ? 'is-loading' : ''}`}>
         <header className="site-header">
           <button className="site-brand" onClick={() => navigate('home')}>
-            ro<span>✳</span>
+            {profile.name}
+            <span>✳</span>
           </button>
           <nav>
             {pages.map((p) => (
@@ -208,11 +216,9 @@ export default function Browser({ window: w }: { window: WindowData }) {
               <div className="web-orbit">✳</div>
             </div>
             <div className="security-lab-link">
-              <span>CURIOUS ABOUT CYBERSECURITY?</span>
-              <button onClick={() => setSimulation(true)}>
-                Suspicious link: free_screensaver.exe ↗
-              </button>
-              <small>Try the harmless Trojan simulation.</small>
+              <span>FROM THE DOWNLOADS DRAWER</span>
+              <button onClick={() => setSimulation(true)}>Get Aurora Screensaver ↗</button>
+              <small>A little nostalgia for your desktop.</small>
             </div>
             <div className="web-marquee">
               THINK · TINKER · BREAK · LEARN · BUILD · REPEAT · THINK · TINKER · BREAK · LEARN
@@ -254,7 +260,7 @@ export default function Browser({ window: w }: { window: WindowData }) {
                         <i />
                       </div>
                       <Icon name={p.icon} size={74} />
-                      <span>{i === 0 ? 'hello, world.' : 'coming_soon'}</span>
+                      <span>{i === 0 ? 'hello, world.' : 'Nabeeh | نبيه'}</span>
                     </div>
                     <span className="project-number">0{i + 1}</span>
                   </div>
@@ -293,16 +299,24 @@ export default function Browser({ window: w }: { window: WindowData }) {
                 </div>
               </div>
               <div>
-                <h2>Currently learning</h2>
-                <p>
-                  How to ask better questions, write better code, and make the internet a little
-                  more interesting.
-                </p>
+                <h2>Education & achievements</h2>
+                <p className="profile-lines">{profile.education}</p>
+                <h2>Certificates & recognition</h2>
+                <p className="profile-lines">{profile.certifications}</p>
+                <h2>Languages</h2>
+                <p className="profile-lines">{profile.languages}</p>
               </div>
             </div>
             <button className="web-cta" onClick={() => launch('explorer', { folder: 'education' })}>
               Open the education folder <ArrowUpRight size={16} />
             </button>
+            <a
+              className="contact-link"
+              href={import.meta.env.BASE_URL + 'cv-x0Arghad.pdf'}
+              download
+            >
+              Download my CV (PDF)
+            </a>
             <p className="sample-note">{profile.note}</p>
           </div>
         )}
@@ -334,6 +348,10 @@ export default function Browser({ window: w }: { window: WindowData }) {
                 LinkedIn
               </a>
             )}
+            <a className="contact-link" href={'tel:' + profile.phone}>
+              {profile.phone}
+            </a>
+            <p>{profile.location}</p>
             <small>One human. Many open tabs.</small>
           </div>
         )}

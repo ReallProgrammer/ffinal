@@ -75,19 +75,23 @@ export const libraryApi: LibraryRepository = {
     const result = await (
       await serviceRequest('/session', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(
+          email.includes('@') ? { email, password } : { username: email, password },
+        ),
       })
     ).json();
     token = result.token;
     changed();
   },
   async logout() {
-    try {
-      await serviceRequest('/session', { method: 'DELETE' });
-    } finally {
-      token = '';
-      changed();
-    }
+    const previous = token;
+    token = '';
+    changed();
+    if (previous)
+      await serviceRequest('/session', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${previous}` },
+      });
   },
   upload(file: File, kind: AssetKind, progress, signal) {
     return new Promise<BookAsset>((resolve, reject) => {

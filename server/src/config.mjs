@@ -50,6 +50,7 @@ export function configuration(env = process.env) {
     accessKeyId: env.S3_ACCESS_KEY_ID,
     secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     ownerEmail: env.OWNER_EMAIL.toLowerCase(),
+    ownerUsername: env.OWNER_USERNAME || 'x0Arghad',
     passwordHash: env.OWNER_PASSWORD_HASH,
     origins,
     port: Number(env.PORT || 8787),

@@ -58,9 +58,10 @@ test('notepad editing saves locally and downloads a copy', async ({ page }) => {
   await editor.fill('A meaningful saved note.\nSecond line.');
   await editor.press('Control+s');
   await expect(note.locator('.title-bar')).not.toContainText('*');
-  expect(
-    await page.evaluate(() => JSON.parse(localStorage.getItem('pc-notes') || '{}')['Untitled.txt']),
-  ).toBe('A meaningful saved note.\nSecond line.');
+  await expect(note.getByRole('textbox', { name: 'Notepad document' })).toHaveValue(
+    'A meaningful saved note.\nSecond line.',
+  );
+  expect(await page.evaluate(() => localStorage.getItem('pc-notes'))).toBeNull();
   await note.getByRole('menuitem', { name: 'File', exact: true }).click();
   await note.getByRole('menuitem', { name: 'Save As…' }).click();
   await note.locator('.app-modal input').fill('my-note.txt');
@@ -95,7 +96,7 @@ test('command prompt implements filesystem, history, errors, and recovery', asyn
     await cmd.fill(command);
     await cmd.press('Enter');
   }
-  await expect(page.locator('.terminal-output')).toContainText('Real Otaku');
+  await expect(page.locator('.terminal-output')).toContainText('x0Arghad');
   await expect(page.locator('.terminal-output')).toContainText('Contact.txt');
   await expect(page.locator('.terminal-output')).toContainText(
     'https://github.com/ReallProgrammer',
@@ -123,7 +124,7 @@ test('browser has working local pages, back, forward, and external links', async
     .getByRole('button', { name: 'Projects', exact: true })
     .click();
   await expect(browser.getByRole('heading', { name: 'The things I make.' })).toBeVisible();
-  await expect(browser.getByRole('link', { name: 'View source' })).toHaveAttribute(
+  await expect(browser.getByRole('link', { name: 'View source' }).first()).toHaveAttribute(
     'href',
     'https://github.com/ReallProgrammer/ffinal',
   );
@@ -270,9 +271,8 @@ test('desktop icons can be renamed and repositioned', async ({ page }, info) => 
   const moved = (await icon.boundingBox())!;
   expect(moved.x - bounds.x).toBe(98);
   expect(moved.y - bounds.y).toBe(0);
-  expect(
-    await page.evaluate(() => JSON.parse(localStorage.getItem('pc-icon-labels') || '{}').computer),
-  ).toBe('My Little Computer');
+  await expect(icon.getByRole('button')).toHaveAttribute('aria-label', 'My Little Computer');
+  expect(await page.evaluate(() => localStorage.getItem('pc-icon-labels'))).toBeNull();
 });
 
 test('simulated errors dismiss without breaking the app', async ({ page }) => {

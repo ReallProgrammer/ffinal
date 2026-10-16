@@ -79,13 +79,25 @@ export function createApp({ db, s3, config }) {
   });
   api.post('/session', limited, async (req, res) => {
     const input = z
-      .object({ email: z.string().email().max(254), password: z.string().min(1).max(256) })
-      .strict()
+      .union([
+        z
+          .object({ email: z.string().email().max(254), password: z.string().min(1).max(256) })
+          .strict(),
+        z
+          .object({
+            username: z.string().trim().min(1).max(80),
+            password: z.string().min(1).max(256),
+          })
+          .strict(),
+      ])
       .parse(req.body);
-    // Always run the password derivation, including for unknown addresses.
+    // Derive the password for unknown identifiers too; usernames grant no additional rights.
     const passwordOK = verifyPassword(input.password, config.passwordHash);
-    if (!passwordOK || input.email.toLowerCase() !== config.ownerEmail)
-      throw problem(401, 'Email or password is incorrect.');
+    const identityOK =
+      'email' in input
+        ? input.email.toLowerCase() === config.ownerEmail
+        : input.username.toLowerCase() === (config.ownerUsername || 'x0Arghad').toLowerCase();
+    if (!passwordOK || !identityOK) throw problem(401, 'Username or password is incorrect.');
     const token = randomBytes(32).toString('base64url');
     await db.query('DELETE FROM sessions WHERE expires_at<now()');
     await db.query(

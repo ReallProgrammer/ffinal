@@ -784,3 +784,253 @@
     max-width: 100%;
   }
 }
+.profile-lines {
+  white-space: pre-line;
+  line-height: 1.7;
+}
+.xp-logon {
+  position: absolute;
+  inset: 0;
+  z-index: 23000;
+  display: flex;
+  flex-direction: column;
+  background: #5b7cda;
+  color: #fff;
+  font-family: Tahoma, sans-serif;
+  overflow: auto;
+}
+.xp-logon > header {
+  background: #08296e;
+  border-bottom: 2px solid #a0b8f3;
+  padding: 26px 6vw;
+  font-size: 24px;
+  font-weight: bold;
+}
+.xp-logon-xp {
+  color: #ffad60;
+  font-size: 17px;
+  vertical-align: super;
+  margin-left: 3px;
+}
+.xp-logon-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  width: min(850px, 92%);
+  margin: 40px auto;
+}
+.xp-logon-welcome {
+  text-align: right;
+  padding: 50px;
+  border-right: 1px solid #d0ddff;
+}
+.xp-logon-welcome > svg {
+  margin-left: auto;
+}
+.xp-logon-welcome h1 {
+  font-size: 42px;
+  font-style: italic;
+  text-shadow: 2px 2px #3854a2;
+  margin: 14px 0;
+}
+.xp-logon-welcome p {
+  font-size: 15px;
+}
+.xp-logon-accounts {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.xp-account {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  text-align: left;
+  color: white;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 12px;
+  width: 100%;
+}
+.xp-account:hover,
+.xp-account.chosen,
+.xp-account:focus-visible {
+  border-color: #b3c6ff;
+  background: linear-gradient(90deg, #315bc2, #4c72cf44);
+}
+.xp-account b {
+  font-size: 22px;
+  font-weight: normal;
+}
+.xp-account small {
+  display: block;
+  font-size: 12px;
+  margin-top: 5px;
+  color: #e4ebff;
+}
+.xp-account-avatar {
+  padding: 5px;
+  border: 2px solid #eee9cd;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #b8ddc5, #659273);
+  box-shadow: 1px 2px 4px #234380;
+}
+.xp-account-avatar.guest {
+  background: linear-gradient(135deg, #ffe7b1, #bc9448);
+}
+.xp-account-form {
+  margin: -8px 12px 0 85px;
+  font-size: 12px;
+}
+.xp-account-form label {
+  display: block;
+  margin-bottom: 10px;
+}
+.xp-account-form input {
+  display: block;
+  margin-top: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  background: white;
+  color: #18335b;
+  border: 1px solid #224586;
+  border-radius: 3px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.xp-account-form label > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.xp-account-form button {
+  background: linear-gradient(#81c979, #358031);
+  border: 2px solid white;
+  border-radius: 4px;
+  color: white;
+  padding: 4px;
+  margin-top: 5px;
+}
+.xp-account-form [role='alert'] {
+  color: #fff7c1;
+  line-height: 1.5;
+}
+.xp-logon > footer {
+  background: #083486;
+  border-top: 2px solid #e5b177;
+  padding: 24px 5vw;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  font-size: 12px;
+}
+.xp-logon footer button,
+.xp-logon footer > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+.xp-logon button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+@media (max-width: 600px) {
+  .xp-logon > header {
+    padding: 20px 24px;
+    font-size: 20px;
+  }
+  .xp-logon-body {
+    grid-template-columns: 1fr;
+    margin: 15px auto;
+  }
+  .xp-logon-welcome {
+    padding: 12px;
+    border: 0;
+    text-align: center;
+  }
+  .xp-logon-welcome > svg {
+    display: none;
+  }
+  .xp-logon-welcome h1 {
+    font-size: 32px;
+  }
+  .xp-logon-accounts {
+    padding: 8px;
+  }
+  .xp-logon > footer {
+    padding: 16px;
+  }
+  .xp-logon footer > span {
+    display: none;
+  }
+}
+.trojan-simulation {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+  background: #030608;
+  color: #d6ded9;
+}
+.trojan-simulation::backdrop {
+  background: #000;
+}
+.trojan-simulation > header,
+.trojan-simulation > footer {
+  max-width: 960px;
+  margin-inline: auto;
+}
+.trojan-simulation > header button {
+  background: #171e22;
+  border-color: #596368;
+}
+.exercise-console {
+  font:
+    13px/1.8 'Courier New',
+    monospace;
+  background: #080e10;
+  border: 1px solid #2b3737;
+  width: min(640px, 100%);
+  min-height: 225px;
+  padding: 18px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  box-sizing: border-box;
+  color: #a9c4b4;
+}
+.exercise-cursor {
+  animation: exercise-blink 1s steps(1) infinite;
+}
+.exercise-complete {
+  background: #101e1a;
+}
+.exercise-lesson {
+  width: min(560px, 100%);
+  text-align: center;
+}
+.exercise-lesson h3 {
+  font-size: 20px;
+  color: #d0ddbd;
+}
+@keyframes exercise-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exercise-cursor {
+    animation: none;
+  }
+}

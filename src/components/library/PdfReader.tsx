@@ -402,7 +402,7 @@ export default function PdfReader({
       {!flat && (
         <p className="pdf-hint">
           Click the page edges or use ← → · scroll or pinch at a point for finer detail · original
-          pages, rendered from your PDF
+          pages
         </p>
       )}
     </div>

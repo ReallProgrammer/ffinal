@@ -35,6 +35,8 @@ test('terminal flag hunt unlocks the portfolio shell before UIstart and survives
   await terminalCommand(page, 'cat CV.txt');
   await expect(output).toContainText('Cybersecurity');
   await terminalCommand(page, 'UIstart');
+  await expect(page.locator('.xp-logon')).toBeVisible();
+  await page.locator('.xp-logon').getByRole('button', { name: 'Guest', exact: false }).click();
   await expect(page.locator('.desktop')).toBeVisible();
   await page.reload();
   await page.locator('.boot-screen').waitFor();
@@ -78,11 +80,11 @@ test('suspicious link cycles a labelled harmless simulation and can be dismissed
 }) => {
   await desktop(page);
   await runApp(page, 'browser');
-  await page.getByRole('button', { name: 'Suspicious link:', exact: false }).click();
-  await expect(page.locator('.trojan-simulation')).toContainText('SIMULATION');
+  await page.getByRole('button', { name: 'Get Aurora Screensaver', exact: false }).click();
+  await expect(page.locator('.trojan-simulation')).toContainText('AURORA');
   await expect(page.locator('.trojan-simulation')).toContainText('All clear', { timeout: 12000 });
   await page.getByRole('button', { name: 'Replay sequence' }).click();
-  await expect(page.locator('.trojan-simulation')).toContainText('Suspicious link');
+  await expect(page.locator('.trojan-simulation')).toContainText('Connecting');
   await page.keyboard.press('Escape');
   await expect(page.locator('.trojan-simulation')).toHaveCount(0);
 });
@@ -123,7 +125,8 @@ test('owner dashboard joins a visitor and both boards exchange moves', async ({
     await desktop(page);
     await runApp(page, 'chess');
     await page.getByRole('button', { name: 'Play the owner', exact: true }).click();
-    await page.getByLabel('Your display name').fill('Browser visitor');
+    const nickname = 'Browser visitor ' + Date.now();
+    await page.getByLabel('Your display name').fill(nickname);
     await page.getByRole('button', { name: 'Request a match', exact: true }).click();
     await expect(page.locator('.chess-status')).toContainText('Waiting for the owner');
     await desktop(owner, '/?chess=owner');
@@ -131,9 +134,13 @@ test('owner dashboard joins a visitor and both boards exchange moves', async ({
     await owner.getByLabel('Owner email').fill(auth.email);
     await owner.getByLabel('Password', { exact: true }).fill(auth.password);
     await owner.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(owner.locator('.chess-alert-status')).toContainText('Telegram');
-    await expect(owner.getByText('Browser visitor', { exact: true })).toBeVisible();
-    await owner.getByRole('button', { name: 'Join match' }).click();
+    await expect(owner.locator('.chess-alert-status')).toContainText('Phone alerts');
+    await expect(owner.getByText(nickname, { exact: true })).toBeVisible();
+    await owner
+      .locator('.chess-dashboard article')
+      .filter({ hasText: nickname })
+      .getByRole('button', { name: 'Join match' })
+      .click();
     await expect(page.locator('.chess-status')).toHaveText('White to move', { timeout: 10000 });
     await page.getByRole('button', { name: 'e2 white pawn', exact: true }).click();
     await page.getByRole('button', { name: 'e4 legal move', exact: true }).click();

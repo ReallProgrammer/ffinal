@@ -3,9 +3,7 @@ import { Chess } from 'chess.js';
 import { desktop, runApp } from './helpers/entry';
 import { arrangeIconGrid } from '../src/lib/desktop-grid';
 
-test('grid resolves duplicate saved positions and keeps icons aligned on resize', async ({
-  page,
-}) => {
+test('grid ignores legacy saved positions and keeps icons aligned on resize', async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem(
       'pc-icon-positions',

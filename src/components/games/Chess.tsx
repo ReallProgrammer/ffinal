@@ -280,7 +280,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     await perform(async () => {
       if (!pushConfig?.pushAvailable || !pushConfig.publicKey)
         throw new Error(
-          'Configure VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT on the server first.',
+          'Browser alerts are currently unavailable. New requests will appear in your dashboard.',
         );
       if (
         !('serviceWorker' in navigator) ||
@@ -451,8 +451,8 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
               </label>
               <button disabled={busy}>Request a match</button>
               <p>
-                The owner gets a dashboard request and, when configured, a phone alert. Availability
-                is not guaranteed. You play White.
+                Request a live match with x0Arghad. You play White; the game starts when your
+                request is accepted.
               </p>
             </form>
           )}
@@ -460,14 +460,12 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
             <section className="chess-dashboard">
               <p className="chess-alert-status" role="status">
                 <b>
-                  {pushConfig?.telegramAvailable
-                    ? 'Telegram configured'
-                    : 'Telegram not connected yet'}
+                  {pushConfig?.telegramAvailable ? 'Phone alerts on' : 'Phone alerts unavailable'}
                 </b>
                 <span>
                   {pushConfig?.telegramAvailable
-                    ? 'New requests send an alert to your Telegram chat with a link to join here.'
-                    : 'Add your bot token, chat ID and site URL in Render to enable phone alerts. Requests still appear below.'}
+                    ? 'You will receive an alert when someone requests a match.'
+                    : 'New requests will appear here. Keep this dashboard open to see them.'}
                 </span>
               </p>
               <div className="chess-controls">
@@ -499,7 +497,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                 {pushMessage ||
                   (pushConfig?.pushAvailable
                     ? 'Enable notifications on each phone or browser you want to use.'
-                    : 'Browser alerts are optional and need separate keys. Telegram works without browser permissions.')}
+                    : 'Browser alerts are currently unavailable.')}
               </small>
               <h2 aria-live="polite">
                 Match requests <span>{queue.filter((m) => m.status === 'waiting').length}</span>

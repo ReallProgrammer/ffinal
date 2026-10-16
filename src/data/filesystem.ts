@@ -34,7 +34,7 @@ const initialFiles: FileEntry[] = [
     icon: 'file',
     kind: 'text',
     parent: 'documents',
-    content: `${profile.name}\n${profile.role}\n\nABOUT\n${profile.about}\n\nSKILLS\n${profile.skills.join(' · ')}\n\nEDUCATION\n${profile.education}\n\nEXPERIENCE\n${profile.experience}\n\nCERTIFICATIONS\n${profile.certifications}\n\nCONTACT\n${profile.github}\n\n${profile.note}`,
+    content: `${profile.name} · ${profile.fullName}\n${profile.role}\n${profile.location}\n\nABOUT\n${profile.about}\n\nSKILLS\n${profile.skills.join(' · ')}\n\nEDUCATION\n${profile.education}\n\nEXPERIENCE\n${profile.experience}\n\nCERTIFICATIONS\n${profile.certifications}\n\nLANGUAGES\n${profile.languages}\n\nCONTACT\n${profile.email}\n${profile.phone}\n${profile.github}`,
   },
   {
     id: 'contact',
@@ -42,7 +42,7 @@ const initialFiles: FileEntry[] = [
     icon: 'mail',
     kind: 'text',
     parent: 'documents',
-    content: `Let's make a connection.\n\nGitHub: ${profile.github}\n${profile.email ? 'Email: ' + profile.email : 'Email: not added yet'}\n${profile.linkedin ? 'LinkedIn: ' + profile.linkedin : 'LinkedIn: not added yet'}\n\nYou can find my projects on GitHub.`,
+    content: `Let's make a connection.\n\nGitHub: ${profile.github}\nEmail: ${profile.email}\nPhone: ${profile.phone}\nLocation: ${profile.location}${profile.linkedin ? '\nLinkedIn: ' + profile.linkedin : ''}\n\nYou can find my projects on GitHub.`,
   },
   {
     id: 'bio',
@@ -91,6 +91,14 @@ const initialFiles: FileEntry[] = [
     kind: 'link',
     parent: 'projects',
     target: 'portfolio://projects',
+  },
+  {
+    id: 'nabeeh',
+    name: 'Nabeeh.url',
+    icon: 'game',
+    kind: 'link',
+    parent: 'projects',
+    target: 'https://github.com/ProgrammeringAlone/Nabeeh',
   },
   {
     id: 'github',

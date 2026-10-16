@@ -126,7 +126,7 @@ test('secret Linux boot supports real file commands, pipes, Snake and reboot', a
   await expect(page.locator('.linux-terminal')).toHaveCount(0);
 });
 
-test('Linux mutations persist across a page refresh and errors do not destroy files', async ({
+test('Linux mutations last until refresh and errors do not destroy session files', async ({
   page,
 }) => {
   await boot(page);
@@ -137,12 +137,11 @@ test('Linux mutations persist across a page refresh and errors do not destroy fi
   await expect(page.locator('.linux-output')).toContainText(
     'Cannot copy or move a directory into itself',
   );
+  await command(page, 'cat saved.txt');
+  await expect(page.locator('.linux-output')).toContainText('keep me');
   await page.reload();
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Control+Alt+t');
-  await command(page, 'cat saved.txt');
-  await expect(page.locator('.linux-output')).toContainText('keep me');
-  await command(page, 'rm saved.txt');
   await command(page, 'cat saved.txt');
   await expect(page.locator('.linux-output')).toContainText('No such file or directory');
 });
@@ -442,14 +441,7 @@ test('file drag, desktop copy/cut/paste, recycle and restore persist actual loca
   await page.keyboard.press('Control+v');
   await expect(icon).toHaveCount(0);
   await expect(page.locator('.os-window.active [data-file-id="cv"]')).toBeVisible();
-  expect(
-    await page.evaluate(
-      () =>
-        JSON.parse(localStorage.getItem('pc-files-v2') || '[]').find(
-          (f: { id: string }) => f.id === 'cv',
-        ).parent,
-    ),
-  ).toBe('documents');
+  expect(await page.evaluate(() => localStorage.getItem('pc-files-v2'))).toBeNull();
   const copy = page
     .locator('.desktop-icon')
     .filter({ has: page.getByRole('button', { name: 'CV.txt - Copy', exact: true }) });

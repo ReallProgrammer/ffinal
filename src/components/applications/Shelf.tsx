@@ -362,13 +362,7 @@ export default function Shelf({
             </form>
           ) : (
             <div className="library-setup-note">
-              <p>The private library service has not been connected yet.</p>
-              <p>
-                Deploy the included backend, configure your owner account and private storage, then
-                set the frontend’s <code>VITE_LIBRARY_API_URL</code>. Setup instructions are in{' '}
-                <code>docs/library-deployment.md</code>.
-              </p>
-              <p>Uploads and editing stay disabled until that service is available.</p>
+              <p>The collection is temporarily unavailable. Please try again later.</p>
             </div>
           )}
           {!!genres.length && (
@@ -394,10 +388,7 @@ export default function Shelf({
       ) : mode === 'archive' ? (
         <section className="library-archive">
           <h2>Your previous local collection.</h2>
-          <p>
-            These files remain on this device. Download originals here; the shared library does not
-            publish or modify them.
-          </p>
+          <p>Download or browse your saved files.</p>
           <button className="xp-button" onClick={() => setMode('library')}>
             Return to library
           </button>

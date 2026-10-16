@@ -24,7 +24,8 @@ export type MachineEvent =
   | { type: 'POWERED_DOWN' }
   | { type: 'CHOOSE'; target: BootTarget; safe?: boolean }
   | { type: 'LOADED' }
-  | { type: 'START_UI' };
+  | { type: 'START_UI' }
+  | { type: 'POWER_ON' };
 const allowed: Partial<Record<SystemPhase, SystemPhase[]>> = {
   BOOT: ['BIOS', 'BOOT_MENU', 'BIOS_SETUP', 'LINUX_TERMINAL', 'OS_LOADING'],
   BIOS: ['OS_LOADING', 'BOOT_MENU', 'BIOS_SETUP', 'LINUX_TERMINAL'],
@@ -37,6 +38,8 @@ const allowed: Partial<Record<SystemPhase, SystemPhase[]>> = {
 };
 export function machineReducer(state: MachineState, event: MachineEvent): MachineState {
   switch (event.type) {
+    case 'POWER_ON':
+      return state.phase === 'OFF' ? { ...state, phase: 'BOOT', turnOff: false } : state;
     case 'START_UI':
       return ['LINUX_TERMINAL', 'WINDOWS_DESKTOP'].includes(state.phase)
         ? { ...state, phase: 'WINDOWS_DESKTOP' }

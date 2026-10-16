@@ -32,7 +32,6 @@ export default function OwnerAccess() {
       }}
     >
       <h2>Owner sign-in</h2>
-      <p>Use the same private owner account as your collection.</p>
       <label>
         Owner email
         <input

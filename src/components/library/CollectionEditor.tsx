@@ -472,10 +472,7 @@ export default function CollectionEditor({
             />
           </Suspense>
           <h3>Your artwork. In three dimensions.</h3>
-          <p>
-            Uploaded artwork is mapped to the object's physical surfaces. Metadata stays in the
-            details panel unless you explicitly enable typography.
-          </p>
+          <p>Preview your artwork, materials, and finishing touches before saving.</p>
           <label>
             Preview background
             <input
