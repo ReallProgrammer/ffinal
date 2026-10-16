@@ -91,6 +91,14 @@ export async function migrate(db) {
         ALTER TABLE media_items ENABLE ROW LEVEL SECURITY;
         INSERT INTO library_migrations(version) VALUES(7);`);
     }
+    if (!(await c.query('SELECT 1 FROM library_migrations WHERE version=8')).rowCount) {
+      await c.query(`ALTER TABLE chess_matches
+        ADD COLUMN time_control integer NOT NULL DEFAULT 0 CHECK(time_control IN (0,180,300,600,900)),
+        ADD COLUMN white_ms bigint NOT NULL DEFAULT 0 CHECK(white_ms>=0),
+        ADD COLUMN black_ms bigint NOT NULL DEFAULT 0 CHECK(black_ms>=0),
+        ADD COLUMN clock_updated_at timestamptz;
+        INSERT INTO library_migrations(version) VALUES(8);`);
+    }
     // The API's table-owning DB role remains functional. Untrusted Data API roles get no policies.
     for (const table of ['books', 'assets', 'shelves', 'sessions', 'library_migrations'])
       await c.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);

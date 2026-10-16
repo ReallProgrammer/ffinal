@@ -20,6 +20,7 @@ export default function ContextMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const focusSubmenu = useRef(false);
   const [position, setPosition] = useState({ x, y });
   const [submenu, setSubmenu] = useState<number | null>(null);
   useLayoutEffect(() => {
@@ -30,6 +31,14 @@ export default function ContextMenu({
     });
     ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, [x, y]);
+  useLayoutEffect(() => {
+    if (submenu !== null && focusSubmenu.current) {
+      ref.current
+        ?.querySelector<HTMLButtonElement>('.enhanced-submenu button:not(:disabled)')
+        ?.focus();
+      focusSubmenu.current = false;
+    }
+  }, [submenu]);
   useEffect(() => {
     const outside = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
@@ -73,12 +82,14 @@ export default function ContextMenu({
           const index = Number((document.activeElement as HTMLElement).dataset.index);
           if (items[index]?.children) {
             e.preventDefault();
-            setSubmenu(index);
-            setTimeout(
-              () =>
-                ref.current?.querySelector<HTMLButtonElement>('.enhanced-submenu button')?.focus(),
-              0,
-            );
+            if (submenu === index) {
+              ref.current
+                ?.querySelector<HTMLButtonElement>('.enhanced-submenu button:not(:disabled)')
+                ?.focus();
+            } else {
+              focusSubmenu.current = true;
+              setSubmenu(index);
+            }
           }
         }
         if (e.key === 'ArrowLeft' && submenu !== null) {

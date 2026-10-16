@@ -268,8 +268,8 @@ test('desktop icons can be renamed and repositioned', async ({ page }, info) => 
   await page.mouse.move(bounds.x + 110, bounds.y + 60, { steps: 10 });
   await page.mouse.up();
   const moved = (await icon.boundingBox())!;
-  expect(moved.x - bounds.x).toBeCloseTo(80);
-  expect(moved.y - bounds.y).toBeCloseTo(30);
+  expect(moved.x - bounds.x).toBe(98);
+  expect(moved.y - bounds.y).toBe(0);
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem('pc-icon-labels') || '{}').computer),
   ).toBe('My Little Computer');

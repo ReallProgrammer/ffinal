@@ -17,7 +17,6 @@ import { machineReducer } from './lib/machine';
 import type { MachineState } from './lib/machine';
 import { LinuxFilesystem } from './lib/linux';
 import SystemScreens from './components/system/SystemScreens';
-import AccessChallenge from './components/system/AccessChallenge';
 import LinuxTerminal from './components/system/LinuxTerminal';
 import Wallpaper from './components/desktop/Wallpaper';
 import DesktopIcons from './components/desktop/DesktopIcons';
@@ -169,7 +168,7 @@ export default function App() {
   const [tray, setTray] = useState<'volume' | 'network' | 'calendar' | null>(null);
   const [entryPassed, setEntryPassed] = useState(() => {
     try {
-      return sessionStorage.getItem('pc-entry-flag') === 'passed';
+      return sessionStorage.getItem('pc-ui-started') === 'yes';
     } catch {
       return false;
     }
@@ -661,7 +660,21 @@ export default function App() {
             unlocked={unlocked}
           />
         )}
-        {stage === 'LINUX_TERMINAL' && <LinuxTerminal reboot={linuxReboot} shutdown={shutdown} />}
+        {(stage === 'LINUX_TERMINAL' || (stage === 'WINDOWS_DESKTOP' && !entryPassed)) && (
+          <LinuxTerminal
+            reboot={linuxReboot}
+            shutdown={shutdown}
+            onStartUI={() => {
+              setEntryPassed(true);
+              try {
+                sessionStorage.setItem('pc-ui-started', 'yes');
+              } catch {
+                /* active session stays usable */
+              }
+              dispatch({ type: 'START_UI' });
+            }}
+          />
+        )}
         {stage === 'SHUTDOWN' && (
           <div className="shutdown-screen" data-system-mode="SHUTDOWN">
             <Icon name="computer" size={70} />
@@ -670,18 +683,6 @@ export default function App() {
             </h1>
             <p>Saving your settings. Closing this session.</p>
           </div>
-        )}
-        {stage === 'WINDOWS_DESKTOP' && !entryPassed && (
-          <AccessChallenge
-            onPass={() => {
-              setEntryPassed(true);
-              try {
-                sessionStorage.setItem('pc-entry-flag', 'passed');
-              } catch {
-                /* Session remains usable without storage. */
-              }
-            }}
-          />
         )}
         {stage === 'WINDOWS_DESKTOP' && entryPassed && (
           <div

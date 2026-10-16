@@ -7,6 +7,11 @@ export interface Match {
   pgn: string;
   version: number;
   result: string;
+  timeControl: number;
+  whiteMs: number;
+  blackMs: number;
+  serverNow: number;
+  receivedAt?: number;
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -26,7 +31,18 @@ export async function chessRequest<T>(
     ...(body ? { body: JSON.stringify(body) } : {}),
     ...(visitor ? { headers: { Authorization: 'Bearer ' + visitor.token } } : {}),
   });
-  return response.status === 204 ? (undefined as T) : response.json();
+  if (response.status === 204) return undefined as T;
+  const value = await response.json();
+  const stamp = (match: Record<string, unknown>) => ({ ...match, receivedAt: performance.now() });
+  return (
+    Array.isArray(value)
+      ? value.map(stamp)
+      : value.fen
+        ? stamp(value)
+        : value.match
+          ? { ...value, match: stamp(value.match) }
+          : value
+  ) as T;
 }
 export function savedVisitor(): VisitorSession | null {
   try {

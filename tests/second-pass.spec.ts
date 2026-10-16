@@ -1,4 +1,4 @@
-import { passEntry } from './helpers/entry';
+import { passEntry, captureFlag } from './helpers/entry';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import {
@@ -28,6 +28,7 @@ async function run(page: Page, app: string) {
   await field.press('Enter');
 }
 async function command(page: Page, line: string) {
+  await captureFlag(page);
   const field = page.getByRole('textbox', { name: 'Linux command', exact: true });
   await field.fill(line);
   await field.press('Enter');
@@ -180,8 +181,8 @@ test('desktop group drag moves both selected icons', async ({ page }, info) => {
   await page.mouse.down();
   await page.mouse.move(a.x + 210, a.y + 55, { steps: 12 });
   await page.mouse.up();
-  expect((await one.boundingBox())!.x - a.x).toBeCloseTo(170);
-  expect((await two.boundingBox())!.x - b.x).toBeCloseTo(170);
+  expect((await one.boundingBox())!.x - a.x).toBe(196);
+  expect((await two.boundingBox())!.x - b.x).toBe(196);
 });
 
 test('legacy collection files remain downloadable and usable as local wallpaper', async ({

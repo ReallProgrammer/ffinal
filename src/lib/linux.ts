@@ -16,7 +16,7 @@ export function initialLinuxTree(): LinuxTree {
     '/home': dir(),
     [HOME_DIR]: dir(),
     [HOME_DIR + '/README.txt']: file(
-      'Welcome to Portfolio Linux.\nThis is a local simulated computer. Your experiments stay in this browser.\nTry help, man, ls, cat CV.txt, or a small game.\nUse reboot or exit to return to the graphical desktop.\n',
+      'Welcome to Portfolio Linux.\nThis is a local simulated computer. Your experiments stay in this browser.\nTry help, man, ls, cat CV.txt, or a small game.\nType UIstart to launch the graphical desktop, or reboot to restart.\n',
     ),
     [HOME_DIR + '/CV.txt']: file(getFile('cv')?.content || profile.about),
     [HOME_DIR + '/projects']: dir(),
@@ -116,14 +116,17 @@ export function tokenizeShell(input: string): string[] {
 }
 export class LinuxFilesystem {
   tree: LinuxTree;
-  constructor(tree?: LinuxTree) {
-    const saved = tree || readStorage<LinuxTree | null>('pc-linux-fs-v2', null);
+  constructor(
+    tree?: LinuxTree,
+    private storageKey = 'pc-linux-fs-v2',
+  ) {
+    const saved = tree || readStorage<LinuxTree | null>(storageKey, null);
     this.tree = saved && saved['/home/guest']?.type === 'dir' ? saved : initialLinuxTree();
   }
   private save(next: LinuxTree) {
     if (JSON.stringify(next).length > 2000000)
       throw new Error('Virtual disk quota exceeded (2 MB of text).');
-    if (!writeStorage('pc-linux-fs-v2', next))
+    if (!writeStorage(this.storageKey, next))
       throw new Error('Unable to persist this change. Browser storage may be full.');
     this.tree = next;
   }
@@ -317,7 +320,7 @@ export function runShell(
           output =
             'Portfolio Linux — a local simulated shell\n\n' +
             linuxCommands.join('  ') +
-            '\n\nUse man COMMAND for details. Pipes | and text redirection > / >> work.\nFiles under /home/guest and /tmp are writable. No real shell commands run.\nUse reboot or exit to return to the graphical desktop.';
+            '\n\nUse man COMMAND for details. Pipes | and text redirection > / >> work.\nFiles under /home/guest and /tmp are writable. No real shell commands run.\nType UIstart to launch the graphical desktop, or reboot to restart.';
           break;
         case 'man':
           output =

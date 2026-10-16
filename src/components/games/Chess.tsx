@@ -10,6 +10,8 @@ import {
   type VisitorSession,
 } from '../../lib/chess/api';
 import { readStorage, writeStorage } from '../../lib/storage';
+import { useBotMatch } from '../../lib/chess/useBotMatch';
+import ChessResult from './ChessResult';
 const glyphs: Record<string, string> = {
   wk: '♔',
   wq: '♕',
@@ -37,17 +39,24 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
   const [mode, setMode] = useState<'bot' | 'visitor' | 'owner'>(
     ownerView ? 'owner' : savedVisitor() ? 'visitor' : 'bot',
   );
-  const [difficulty, setDifficulty] = useState('casual'),
-    [pgn, setPgn] = useState(() => {
-      const saved = readStorage('pc-chess-bot', '');
-      try {
-        const game = new Rules();
-        if (saved) game.loadPgn(saved);
-        return game.pgn();
-      } catch {
-        return '';
-      }
-    });
+  const [difficulty, setDifficulty] = useState('casual');
+  const bot = useBotMatch(mode === 'bot'),
+    pgn = bot.state.pgn;
+  const [timeControl, setTimeControl] = useState(bot.state.timeControl);
+  const [theme, setTheme] = useState(() => {
+    const saved = readStorage('pc-chess-theme', 'classic');
+    return ['classic', 'walnut', 'midnight', 'ocean'].includes(saved) ? saved : 'classic';
+  });
+  const [review, setReview] = useState<number | null>(null),
+    [dismissed, setDismissed] = useState('');
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 200);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    writeStorage('pc-chess-theme', theme);
+  }, [theme]);
   const [visitor, setVisitor] = useState<VisitorSession | null>(savedVisitor),
     [match, setMatch] = useState<Match | null>(null),
     [queue, setQueue] = useState<Match[]>([]);
@@ -82,20 +91,74 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     return c;
   }, [pgn, match?.pgn, mode]);
   const player = mode === 'owner' ? 'b' : 'w';
-  const playable = mode === 'bot' ? !game.isGameOver() : match?.status === 'active';
-  const turnAllowed = playable && game.turn() === player && !busy && !thinking;
+  const playable =
+    mode === 'bot' ? !game.isGameOver() && !bot.state.result : match?.status === 'active';
+  const turnAllowed = playable && review === null && game.turn() === player && !busy && !thinking;
   const moves = selected ? game.moves({ square: selected, verbose: true }) : [];
-  const history = game.history({ verbose: true }),
-    last = history.at(-1);
+  const history = game.history({ verbose: true });
+  const viewing = useMemo(() => {
+    if (review === null) return game;
+    const board = new Rules();
+    for (const move of history.slice(0, review)) board.move(move);
+    return board;
+  }, [game, review]);
+  const last = review === null ? history.at(-1) : history[review - 1];
+  const result =
+    mode === 'bot'
+      ? bot.state.result ||
+        (game.isCheckmate()
+          ? `${game.turn() === 'w' ? 'Black' : 'White'} wins by checkmate`
+          : game.isDraw()
+            ? 'Draw'
+            : '')
+      : match && ['finished', 'expired', 'cancelled'].includes(match.status)
+        ? match.result
+        : '';
+  const resultKey = `${mode}:${match?.id || pgn}:${result}`;
+  const won =
+    mode === 'bot'
+      ? result.startsWith('White wins')
+      : result.startsWith(mode === 'owner' ? 'Owner wins' : 'Visitor wins');
+  const outcome = result.startsWith('Draw')
+    ? 'draw'
+    : result.includes('wins')
+      ? won
+        ? 'win'
+        : 'lose'
+      : 'ended';
+  const clocks =
+    mode === 'bot' ? bot.clock : { whiteMs: match?.whiteMs || 0, blackMs: match?.blackMs || 0 };
+  if (mode !== 'bot' && match?.status === 'active' && match.timeControl) {
+    const elapsed = Math.max(0, performance.now() - (match.receivedAt || performance.now()));
+    if (game.turn() === 'w') clocks.whiteMs = Math.max(0, clocks.whiteMs - elapsed);
+    else clocks.blackMs = Math.max(0, clocks.blackMs - elapsed);
+  }
+  const formatClock = (ms: number) =>
+    `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, '0')}`;
+  const timerOptions = (
+    <>
+      <option value={0}>Untimed</option>
+      {[3, 5, 10, 15].map((n) => (
+        <option key={n} value={n * 60}>
+          {n} minutes
+        </option>
+      ))}
+    </>
+  );
+  const changeReview = (value: number | null) => {
+    setReview(value);
+    setSelected(null);
+    setPromotion(null);
+  };
   useEffect(() => {
-    if (mode === 'bot') writeStorage('pc-chess-bot', pgn);
-  }, [pgn, mode]);
+    changeReview(null);
+  }, [mode, match?.id]);
   useEffect(() => {
     setSelected(null);
     setPromotion(null);
   }, [mode, match?.id, match?.version]);
   useEffect(() => {
-    if (mode !== 'bot' || game.turn() !== 'b' || game.isGameOver()) {
+    if (mode !== 'bot' || game.turn() !== 'b' || game.isGameOver() || bot.state.result) {
       setThinking(false);
       return;
     }
@@ -105,11 +168,8 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     });
     worker.onmessage = ({ data }) => {
       if (data) {
-        const next = new Rules();
-        if (pgn) next.loadPgn(pgn);
         try {
-          next.move(data);
-          setPgn(next.pgn());
+          bot.play(data, pgn);
         } catch {
           setError('The bot could not finish its move. Start a new game.');
         }
@@ -122,7 +182,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     };
     worker.postMessage({ pgn, difficulty });
     return () => worker.terminate();
-  }, [pgn, difficulty, mode]);
+  }, [pgn, difficulty, mode, bot.state.result]);
   useEffect(() => {
     if (mode === 'bot' || (mode === 'owner' && !owner) || (mode === 'visitor' && !visitor)) return;
     let live = true,
@@ -187,8 +247,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     setPromotion(null);
     if (mode === 'bot') {
       try {
-        game.move({ from, to, promotion: promote });
-        setPgn(game.pgn());
+        bot.play({ from, to, promotion: promote });
       } catch {
         setError('Choose one of the highlighted legal squares.');
       }
@@ -208,6 +267,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
   }
   function choose(square: Square) {
     if (!turnAllowed) return;
+    if (mode === 'bot') bot.start();
     const legal = moves.filter((m) => m.to === square);
     if (selected && legal.length) {
       if (legal.some((m) => m.promotion)) setPromotion({ from: selected, to: square });
@@ -256,8 +316,9 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
     (_, i) =>
       `${'abcdefgh'[player === 'b' ? 7 - (i % 8) : i % 8]}${player === 'b' ? Math.floor(i / 8) + 1 : 8 - Math.floor(i / 8)}` as Square,
   );
-  const status =
-    mode !== 'bot' && match?.status !== 'active'
+  const status = result
+    ? result
+    : mode !== 'bot' && match?.status !== 'active'
       ? match?.result ||
         (match
           ? 'Waiting for the owner — request expires after 15 minutes.'
@@ -270,7 +331,24 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
             ? 'The bot is thinking…'
             : `${game.turn() === 'w' ? 'White' : 'Black'} to move${game.isCheck() ? ' · Check' : ''}`;
   return (
-    <div className="chess-app">
+    <div
+      className="chess-app"
+      data-chess-theme={
+        ['classic', 'walnut', 'midnight', 'ocean'].includes(theme) ? theme : 'classic'
+      }
+    >
+      {result && dismissed !== resultKey && (
+        <ChessResult
+          key={resultKey}
+          outcome={outcome}
+          message={result}
+          onClose={() => setDismissed(resultKey)}
+          onReview={() => {
+            setDismissed(resultKey);
+            changeReview(0);
+          }}
+        />
+      )}
       <header>
         <div>
           <small>ACCESSORIES / CHESS CLUB</small>
@@ -312,9 +390,21 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   <option value="club">Club · deeper search</option>
                 </select>
               </label>
+              <label>
+                New game clock
+                <select
+                  aria-label="New game clock"
+                  value={timeControl}
+                  onChange={(e) => setTimeControl(Number(e.target.value))}
+                >
+                  {timerOptions}
+                </select>
+              </label>
               <button
                 onClick={() => {
-                  setPgn('');
+                  bot.newGame(timeControl);
+                  changeReview(null);
+                  setDismissed('');
                   setSelected(null);
                   setError('');
                 }}
@@ -332,7 +422,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   const result = await chessRequest<{ match: Match; token: string }>(
                     '/chess/matches',
                     'POST',
-                    { nickname },
+                    { nickname, timeControl },
                   );
                   const v = { id: result.match.id, token: result.token };
                   saveVisitor(v);
@@ -349,6 +439,15 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   maxLength={40}
                   required
                 />
+              </label>
+              <label>
+                Match clock
+                <select
+                  value={timeControl}
+                  onChange={(e) => setTimeControl(Number(e.target.value))}
+                >
+                  {timerOptions}
+                </select>
               </label>
               <button disabled={busy}>Request a match</button>
               <p>
@@ -415,7 +514,8 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                     <div>
                       <b>{m.nickname}</b>
                       <small>
-                        {m.status === 'waiting' ? 'Waiting to play' : 'Match in progress'}
+                        {m.status === 'waiting' ? 'Waiting to play' : 'Match in progress'} ·{' '}
+                        {m.timeControl ? `${m.timeControl / 60} min each` : 'Untimed'}
                       </small>
                     </div>
                     <button
@@ -452,9 +552,30 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                 ))}
             </section>
           )}
+          <label className="chess-theme-control">
+            Board theme
+            <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+              <option value="classic">Classic green</option>
+              <option value="walnut">Walnut</option>
+              <option value="midnight">Midnight</option>
+              <option value="ocean">Ocean blue</option>
+            </select>
+          </label>
           {(mode === 'bot' || match) && (
             <div className="chess-play-area">
               <div>
+                <div className="chess-clocks" aria-label="Chess clocks">
+                  {(['w', 'b'] as const).map((color) => (
+                    <div key={color} className={playable && game.turn() === color ? 'running' : ''}>
+                      <span>{color === 'w' ? 'White' : 'Black'}</span>
+                      <output aria-label={color === 'w' ? 'White clock' : 'Black clock'}>
+                        {(mode === 'bot' ? bot.state.timeControl : match?.timeControl)
+                          ? formatClock(color === 'w' ? clocks.whiteMs : clocks.blackMs)
+                          : 'Untimed'}
+                      </output>
+                    </div>
+                  ))}
+                </div>
                 <div className="chess-status" role="status">
                   {status}
                 </div>
@@ -466,7 +587,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   aria-busy={thinking || busy}
                 >
                   {squares.map((square, i) => {
-                    const piece = game.get(square);
+                    const piece = viewing.get(square);
                     const target = moves.some((m) => m.to === square);
                     return (
                       <button
@@ -474,7 +595,7 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                         aria-label={`${square}${piece ? ' ' + (piece.color === 'w' ? 'white' : 'black') + ' ' + names[piece.type] : ''}${target ? ' legal move' : ''}`}
                         aria-pressed={selected === square}
                         disabled={!turnAllowed}
-                        className={`${(i + Math.floor(i / 8)) % 2 ? 'dark' : 'light'} ${selected === square ? 'selected' : ''} ${target ? 'legal' : ''} ${last && (last.from === square || last.to === square) ? 'last-move' : ''} ${piece?.type === 'k' && piece.color === game.turn() && game.isCheck() ? 'checked' : ''}`}
+                        className={`${(i + Math.floor(i / 8)) % 2 ? 'dark' : 'light'} ${selected === square ? 'selected' : ''} ${target ? 'legal' : ''} ${last && (last.from === square || last.to === square) ? 'last-move' : ''} ${piece?.type === 'k' && piece.color === viewing.turn() && viewing.isCheck() ? 'checked' : ''}`}
                         onClick={() => choose(square)}
                         onKeyDown={(e) => {
                           const direction = (
@@ -503,6 +624,9 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   })}
                 </div>
                 <p className="chess-side-note">
+                  {review !== null
+                    ? `Reviewing move ${review} of ${history.length}. The live game continues. `
+                    : ''}
                   You play {player === 'w' ? 'White' : 'Black'}. Select a piece, then a highlighted
                   square.
                 </p>
@@ -552,17 +676,58 @@ export default function Chess({ ownerView = false }: { ownerView?: boolean }) {
                   </div>
                 )}
               </div>
-              <aside>
-                <h2>Moves</h2>
+              <aside className="chess-history">
+                <h2>Move history</h2>
+                <div className="chess-history-controls">
+                  <button aria-label="First position" onClick={() => changeReview(0)}>
+                    |←
+                  </button>
+                  <button
+                    aria-label="Previous move"
+                    disabled={(review ?? history.length) === 0}
+                    onClick={() => changeReview(Math.max(0, (review ?? history.length) - 1))}
+                  >
+                    ←
+                  </button>
+                  <button
+                    aria-label="Next move"
+                    disabled={review === null || review >= history.length}
+                    onClick={() => changeReview(Math.min(history.length, (review ?? 0) + 1))}
+                  >
+                    →
+                  </button>
+                  <button onClick={() => changeReview(null)} aria-pressed={review === null}>
+                    Live board
+                  </button>
+                </div>
+                {review !== null && (
+                  <p className="chess-review-note">
+                    Move {review} / {history.length} · viewing only
+                  </p>
+                )}
                 <ol className="chess-moves">
                   {Array.from({ length: Math.ceil(history.length / 2) }, (_, i) => (
                     <li key={i}>
-                      <span>{history[i * 2]?.san}</span>
-                      <span>{history[i * 2 + 1]?.san || '…'}</span>
+                      {[0, 1].map((side) => {
+                        const ply = i * 2 + side;
+                        return history[ply] ? (
+                          <button
+                            key={side}
+                            aria-label={`Review move ${ply + 1}: ${history[ply].san}`}
+                            aria-pressed={review === ply + 1}
+                            onClick={() => changeReview(ply + 1)}
+                          >
+                            {history[ply].san}
+                          </button>
+                        ) : (
+                          <span key={side}>…</span>
+                        );
+                      })}
                     </li>
                   ))}
                 </ol>
                 {!history.length && <p>The board is yours.</p>}
+                {result && <button onClick={() => setDismissed('')}>Show result</button>}
               </aside>
             </div>
           )}

@@ -1,10 +1,21 @@
 import { expect, type Page } from '@playwright/test';
+export async function terminalCommand(page: Page, command: string) {
+  const input = page.getByRole('textbox', { name: 'Linux command', exact: true });
+  await input.fill(command);
+  await input.press('Enter');
+}
+export async function captureFlag(page: Page) {
+  await expect(page.locator('.linux-terminal')).toBeVisible({ timeout: 20000 });
+  if ((await page.locator('.linux-terminal').getAttribute('data-entry-phase')) === 'locked') {
+    await terminalCommand(page, '-flag FLAG{follow_the_trail}');
+    await expect(page.locator('.linux-terminal')).toHaveAttribute('data-entry-phase', 'unlocked');
+  }
+}
 export async function passEntry(page: Page) {
-  await expect(page.locator('.access-challenge,.desktop')).toBeVisible({ timeout: 20000 });
-  if (await page.locator('.access-challenge').isVisible()) {
-    await page.getByRole('button', { name: 'Phishing', exact: true }).click();
-    await page.getByLabel('Submit your flag').fill('FLAG{spot_the_phish}');
-    await page.getByRole('button', { name: 'Unlock the desktop' }).click();
+  await expect(page.locator('.linux-terminal,.desktop')).toBeVisible({ timeout: 20000 });
+  if (await page.locator('.linux-terminal').isVisible()) {
+    await captureFlag(page);
+    await terminalCommand(page, 'UIstart');
   }
   await expect(page.locator('.desktop')).toBeVisible();
 }

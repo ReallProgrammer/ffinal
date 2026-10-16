@@ -17,6 +17,7 @@ import {
 } from '../../data/filesystem';
 import Icon from '../Icon';
 import ContextMenu from '../ContextMenu';
+import { arrangeIconGrid } from '../../lib/desktop-grid';
 interface DesktopItem {
   id: string;
   label: string;
@@ -102,6 +103,7 @@ export default function DesktopIcons({
     y: number;
     items: Record<string, Position>;
     moved: boolean;
+    layout: Record<string, Position>;
   } | null>(null);
   const marquee = useRef<{ x: number; y: number; base: string[] } | null>(null);
   const suppress = useRef(false);
@@ -119,13 +121,25 @@ export default function DesktopIcons({
       file: f,
     }));
   const items = [...desktopItems.filter((i) => !hidden.includes(i.id)), ...extra];
-  const rows = Math.max(3, Math.min(6, Math.floor((size.h - 140) / 91)));
-  const pos = (item: DesktopItem, i: number) =>
-    positions[item.id] || { x: 22 + Math.floor(i / rows) * 98, y: 24 + (i % rows) * 91 };
+  const layout = arrangeIconGrid(
+    items.map((item) => item.id),
+    positions,
+    size.w,
+    size.h,
+  );
+  const pos = (item: DesktopItem, _i: number) =>
+    drag.current?.moved
+      ? (drag.current.items[item.id] ? positions[item.id] : drag.current.layout[item.id]) ||
+        layout[item.id]
+      : layout[item.id];
   useEffect(() => {
-    const resize = () => setSize({ w: innerWidth, h: innerHeight });
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+    const element = surface.current;
+    if (!element) return;
+    const resize = () => setSize({ w: element.clientWidth, h: element.clientHeight });
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
   useEffect(() => {
     if (lastArrange.current === arrange) return;
@@ -296,7 +310,7 @@ export default function DesktopIcons({
           setContext(null);
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left,
-            y = e.clientY - rect.top;
+            y = e.clientY - rect.top + e.currentTarget.scrollTop;
           marquee.current = { x, y, base: e.ctrlKey || e.metaKey || e.shiftKey ? selected : [] };
           if (!e.ctrlKey && !e.metaKey && !e.shiftKey) setSelected([]);
           setSelection({ x, y, width: 0, height: 0 });
@@ -307,7 +321,7 @@ export default function DesktopIcons({
           if (!m) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left,
-            y = e.clientY - rect.top;
+            y = e.clientY - rect.top + e.currentTarget.scrollTop;
           const box = {
             x: Math.min(m.x, x),
             y: Math.min(m.y, y),
@@ -322,7 +336,10 @@ export default function DesktopIcons({
               ].find((el) => el.dataset.desktopId === item.id);
               if (!element) return false;
               const bounds = element.getBoundingClientRect();
-              const p = { x: bounds.left - rect.left, y: bounds.top - rect.top };
+              const p = {
+                x: bounds.left - rect.left,
+                y: bounds.top - rect.top + e.currentTarget.scrollTop,
+              };
               return (
                 p.x < box.x + box.width &&
                 p.x + bounds.width > box.x &&
@@ -359,10 +376,10 @@ export default function DesktopIcons({
               className={`desktop-icon ${selected.includes(item.id) ? 'selected' : ''} ${dropTarget === item.id ? 'drop-target' : ''}`}
               style={
                 {
-                  left: Math.min(p.x, size.w - 95),
-                  top: Math.min(p.y, size.h - 140),
-                  '--icon-x': `${Math.min(p.x, size.w - 95)}px`,
-                  '--icon-y': `${Math.min(p.y, size.h - 140)}px`,
+                  left: p.x,
+                  top: p.y,
+                  '--icon-x': `${p.x}px`,
+                  '--icon-y': `${p.y}px`,
                 } as CSSProperties
               }
               onDragOver={(e) => {
@@ -388,7 +405,8 @@ export default function DesktopIcons({
               }
             >
               <button
-                aria-label={item.label}
+                aria-label={labels[item.id] || item.label}
+                title={labels[item.id] || item.label}
                 aria-pressed={selected.includes(item.id)}
                 onClick={(e) => {
                   if (suppress.current) {
@@ -445,6 +463,7 @@ export default function DesktopIcons({
                         .map((v) => [v.id, pos(v, items.indexOf(v))]),
                     ),
                     moved: false,
+                    layout,
                   };
                   e.currentTarget.setPointerCapture(e.pointerId);
                 }}
@@ -461,7 +480,13 @@ export default function DesktopIcons({
                   for (const [id, origin] of Object.entries(g.items))
                     next[id] = {
                       x: Math.max(0, Math.min(size.w - 92, origin.x + dx)),
-                      y: Math.max(0, Math.min(size.h - 135, origin.y + dy)),
+                      y: Math.max(
+                        0,
+                        Math.min(
+                          Math.max(size.h - 95, ...Object.values(layout).map((p) => p.y)),
+                          origin.y + dy,
+                        ),
+                      ),
                     };
                   positionsRef.current = next;
                   setPositions(next);
@@ -471,7 +496,15 @@ export default function DesktopIcons({
                   const g = drag.current;
                   if (g?.moved) {
                     suppress.current = true;
-                    writeStorage('pc-icon-positions', positionsRef.current);
+                    const snapped = arrangeIconGrid(
+                      items.map((item) => item.id),
+                      positionsRef.current,
+                      size.w,
+                      size.h,
+                    );
+                    setPositions(snapped);
+                    positionsRef.current = snapped;
+                    writeStorage('pc-icon-positions', snapped);
                     const target = itemAt(e.clientX, e.clientY)?.dataset.desktopId;
                     if (target === 'recycle') deleteIcons(Object.keys(g.items));
                     else {

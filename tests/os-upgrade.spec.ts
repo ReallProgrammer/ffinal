@@ -1,29 +1,46 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { desktop, runApp } from './helpers/entry';
+import { desktop, runApp, terminalCommand } from './helpers/entry';
 const credentials = () => JSON.parse(readFileSync(process.env.LIBRARY_TEST_CREDENTIALS!, 'utf8'));
-test('capture the flag gates the desktop, gives feedback and survives a refresh', async ({
+test('terminal flag hunt unlocks the portfolio shell before UIstart and survives refresh', async ({
   page,
 }) => {
   await page.goto('/');
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
-  await expect(page.locator('.access-challenge')).toBeVisible();
+  const terminal = page.locator('.linux-terminal'),
+    output = page.locator('.linux-output');
+  await expect(terminal).toHaveAttribute('data-entry-phase', 'locked');
   await expect(page.locator('.desktop')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Encryption', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Not quite');
-  await page.getByRole('button', { name: 'Phishing', exact: true }).click();
-  await page.getByLabel('Submit your flag').fill('wrong');
-  await page.getByRole('button', { name: 'Unlock the desktop' }).click();
-  await expect(page.getByRole('alert')).toContainText('Copy the flag');
-  await page.getByLabel('Submit your flag').fill('FLAG{spot_the_phish}');
-  await page.getByRole('button', { name: 'Unlock the desktop' }).click();
+  await terminalCommand(page, 'UIstart');
+  await expect(output).toContainText('UI locked');
+  await terminalCommand(page, '-flag wrong');
+  await expect(output).toContainText('Flag not accepted');
+  for (const command of [
+    'ls',
+    'cat README.txt',
+    'cd training',
+    'cat briefing.txt',
+    'cd archive',
+    'ls -a',
+    'cd .cache',
+    'cat ctf.txt',
+  ])
+    await terminalCommand(page, command);
+  await expect(output).toContainText('FLAG{follow_the_trail}');
+  await terminalCommand(page, '-flag FLAG{follow_the_trail}');
+  await expect(terminal).toHaveAttribute('data-entry-phase', 'unlocked');
+  await expect(output).toContainText('Type UIstart');
+  await expect(page.locator('.desktop')).toHaveCount(0);
+  await terminalCommand(page, 'cat CV.txt');
+  await expect(output).toContainText('Cybersecurity');
+  await terminalCommand(page, 'UIstart');
   await expect(page.locator('.desktop')).toBeVisible();
   await page.reload();
   await page.locator('.boot-screen').waitFor();
   await page.keyboard.press('Enter');
   await expect(page.locator('.desktop')).toBeVisible();
-  await expect(page.locator('.access-challenge')).toHaveCount(0);
+  await expect(terminal).toHaveCount(0);
 });
 test('tray widgets replace one another and desktop selection stays below windows', async ({
   page,
@@ -78,7 +95,7 @@ test('chess bot responds legally at each difficulty and retains the game', async
     await app.getByRole('button', { name: 'New game', exact: true }).click();
     await app.getByRole('button', { name: 'e2 white pawn', exact: true }).click();
     await app.getByRole('button', { name: 'e4 legal move', exact: true }).click();
-    await expect(app.getByRole('status')).toHaveText('White to move', { timeout: 10000 });
+    await expect(app.locator('.chess-status')).toHaveText('White to move', { timeout: 10000 });
     await expect(app.getByRole('button', { name: 'e4 white pawn', exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => JSON.parse(localStorage.getItem('pc-chess-bot') || '""')),
@@ -108,7 +125,7 @@ test('owner dashboard joins a visitor and both boards exchange moves', async ({
     await page.getByRole('button', { name: 'Play the owner', exact: true }).click();
     await page.getByLabel('Your display name').fill('Browser visitor');
     await page.getByRole('button', { name: 'Request a match', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('Waiting for the owner');
+    await expect(page.locator('.chess-status')).toContainText('Waiting for the owner');
     await desktop(owner, '/?chess=owner');
     const auth = credentials();
     await owner.getByLabel('Owner email').fill(auth.email);

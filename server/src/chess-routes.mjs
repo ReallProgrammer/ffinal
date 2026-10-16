@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { clockValues, settleClock } from './chess-clock.mjs';
 import { notifyChessTelegram } from './telegram.mjs';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -19,22 +20,42 @@ const snapshot = (row) => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   expiresAt: row.expires_at,
+  timeControl: row.time_control,
+  ...clockValues(row),
+  serverNow: Date.now(),
 });
 export function chessRoutes(api, { db, owner, session, config }) {
   const telegramReady = Boolean(
     config.telegramBotToken && config.telegramChatId && config.chessSiteUrl,
   );
   const pushReady = Boolean(config.vapidPublicKey && config.vapidPrivateKey && config.vapidSubject);
-  const expire = () =>
-    db.query(
-      "UPDATE chess_matches SET status='expired',result='Session expired',version=version+1 WHERE status IN ('waiting','active') AND expires_at<now()",
-    );
+  const expire = async () => {
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      const due =
+        await c.query(`SELECT * FROM chess_matches WHERE status='active' AND time_control>0 AND clock_updated_at IS NOT NULL
+        AND EXTRACT(EPOCH FROM (now()-clock_updated_at))*1000 >= CASE WHEN split_part(fen,' ',2)='w' THEN white_ms ELSE black_ms END FOR UPDATE SKIP LOCKED`);
+      for (const row of due.rows) await settleClock(c, row);
+      await c.query(
+        "UPDATE chess_matches SET status='expired',result='Session expired',version=version+1,updated_at=now() WHERE status IN ('waiting','active') AND expires_at<now()",
+      );
+      await c.query('COMMIT');
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    } finally {
+      c.release();
+    }
+  };
   api.get('/chess/config', (_req, res) =>
     res.json({
       pushAvailable: pushReady,
       telegramAvailable: telegramReady,
       publicKey: pushReady ? config.vapidPublicKey : null,
       waitingMinutes: 15,
+      timeControlsSeconds: [0, 180, 300, 600, 900],
+      defaultTimeControl: 600,
     }),
   );
   api.post(
@@ -46,8 +67,13 @@ export function chessRoutes(api, { db, owner, session, config }) {
       message: { error: 'Please wait before requesting another match.' },
     }),
     async (req, res) => {
-      const { nickname } = z
-        .object({ nickname: z.string().trim().min(1).max(40) })
+      const { nickname, timeControl } = z
+        .object({
+          nickname: z.string().trim().min(1).max(40),
+          timeControl: z
+            .union([z.literal(0), z.literal(180), z.literal(300), z.literal(600), z.literal(900)])
+            .default(600),
+        })
         .strict()
         .parse(req.body);
       const secret = randomBytes(32).toString('base64url'),
@@ -67,8 +93,8 @@ export function chessRoutes(api, { db, owner, session, config }) {
         if (count >= 50) throw problem(429, 'The owner queue is full. Try a bot while you wait.');
         row = (
           await c.query(
-            "INSERT INTO chess_matches(id,nickname,guest_hash,fen,expires_at) VALUES($1,$2,$3,$4,now()+interval '15 minutes') RETURNING *",
-            [id, nickname, hash(secret), new Chess().fen()],
+            "INSERT INTO chess_matches(id,nickname,guest_hash,fen,expires_at,time_control,white_ms,black_ms) VALUES($1,$2,$3,$4,now()+interval '15 minutes',$5,$6,$6) RETURNING *",
+            [id, nickname, hash(secret), new Chess().fen(), timeControl, timeControl * 1000],
           )
         ).rows[0];
         await c.query('COMMIT');
@@ -150,6 +176,10 @@ export function chessRoutes(api, { db, owner, session, config }) {
         throw problem(404, 'Match not found or this session is not yours.');
       if (new Date(row.expires_at) < new Date() && ['waiting', 'active'].includes(row.status))
         throw problem(409, 'This session expired. Request a new match.');
+      if (await settleClock(c, row)) {
+        await c.query('COMMIT');
+        return snapshot(row);
+      }
       await work(c, row, isOwner);
       const next = (await c.query('SELECT * FROM chess_matches WHERE id=$1', [id])).rows[0];
       await c.query('COMMIT');
@@ -174,7 +204,7 @@ export function chessRoutes(api, { db, owner, session, config }) {
         )
           throw problem(409, 'Finish your current match before joining another.');
         await c.query(
-          "UPDATE chess_matches SET status='active',version=version+1,updated_at=now(),expires_at=now()+interval '1 day' WHERE id=$1",
+          "UPDATE chess_matches SET status='active',version=version+1,updated_at=now(),clock_updated_at=now(),expires_at=now()+interval '1 day' WHERE id=$1",
           [row.id],
         );
       }),
@@ -185,6 +215,7 @@ export function chessRoutes(api, { db, owner, session, config }) {
       await locked(req, async (c, row, isOwner) => {
         if (!['waiting', 'active'].includes(row.status))
           throw problem(409, 'This match has already ended.');
+        const remaining = clockValues(row);
         const result =
           row.status === 'waiting'
             ? isOwner
@@ -194,8 +225,14 @@ export function chessRoutes(api, { db, owner, session, config }) {
               ? 'Visitor wins by resignation'
               : 'Owner wins by resignation';
         await c.query(
-          'UPDATE chess_matches SET status=$2,result=$3,version=version+1,updated_at=now() WHERE id=$1',
-          [row.id, row.status === 'waiting' ? 'cancelled' : 'finished', result],
+          'UPDATE chess_matches SET status=$2,result=$3,white_ms=$4,black_ms=$5,clock_updated_at=NULL,version=version+1,updated_at=now() WHERE id=$1',
+          [
+            row.id,
+            row.status === 'waiting' ? 'cancelled' : 'finished',
+            result,
+            remaining.whiteMs,
+            remaining.blackMs,
+          ],
         );
       }),
     ),
@@ -218,6 +255,7 @@ export function chessRoutes(api, { db, owner, session, config }) {
           if (row.status !== 'active') throw problem(409, 'The match is not active.');
           if (row.version !== move.version)
             throw problem(409, 'The board changed. Wait for the latest move and try again.');
+          const remaining = clockValues(row);
           const game = new Chess();
           if (row.pgn) game.loadPgn(row.pgn);
           if (game.turn() !== (isOwner ? 'b' : 'w')) throw problem(403, 'It is not your turn.');
@@ -235,8 +273,16 @@ export function chessRoutes(api, { db, owner, session, config }) {
               ? 'Draw'
               : '';
           await c.query(
-            "UPDATE chess_matches SET fen=$2,pgn=$3,status=$4,result=$5,version=version+1,updated_at=now(),expires_at=now()+interval '1 day' WHERE id=$1",
-            [row.id, game.fen(), game.pgn(), over ? 'finished' : 'active', result],
+            "UPDATE chess_matches SET fen=$2,pgn=$3,status=$4,result=$5,white_ms=$6,black_ms=$7,clock_updated_at=CASE WHEN $4='active' THEN now() ELSE NULL END,version=version+1,updated_at=now(),expires_at=now()+interval '1 day' WHERE id=$1",
+            [
+              row.id,
+              game.fen(),
+              game.pgn(),
+              over ? 'finished' : 'active',
+              result,
+              remaining.whiteMs,
+              remaining.blackMs,
+            ],
           );
         }),
       );

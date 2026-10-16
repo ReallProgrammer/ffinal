@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ENTRY_FLAG,
+  challengeHint,
+  challengeFilesystem,
+  flagCaptured,
+} from '../../lib/entry-challenge';
+import {
   LinuxFilesystem,
   linuxCommands,
   listLinux,
@@ -13,11 +19,17 @@ import { useDesktop } from '../../lib/DesktopContext';
 export default function LinuxTerminal({
   reboot,
   shutdown,
+  onStartUI,
 }: {
   reboot: () => void;
   shutdown: () => void;
+  onStartUI: () => void;
 }) {
-  const fs = useRef(new LinuxFilesystem());
+  const [unlocked, setUnlocked] = useState(flagCaptured);
+  const [initialFilesystem] = useState(() =>
+    unlocked ? new LinuxFilesystem() : challengeFilesystem(),
+  );
+  const fs = useRef(initialFilesystem);
   const started = useRef(Date.now());
   const [cwd, setCwd] = useState('/home/guest');
   const [input, setInput] = useState('');
@@ -27,7 +39,9 @@ export default function LinuxTerminal({
     'login: guest',
     'Last login: ' + new Date().toLocaleString(),
     '',
-    'Welcome, guest. Type help to find your bearings.',
+    unlocked
+      ? 'Welcome, guest. Type help to explore the terminal site. Type UIstart to launch the UI.'
+      : challengeHint,
     '',
   ]);
   const [history, setHistory] = useState<string[]>([]);
@@ -41,11 +55,12 @@ export default function LinuxTerminal({
   const shortPath = cwd.replace(/^\/home\/guest(?=\/|$)/, '~');
   const prompt = `guest@portfolio:${shortPath}$`;
   useEffect(() => {
+    if (!unlocked) return;
     void shelfRepository
       .list()
       .then((items) => fs.current.mountShelf(items))
       .catch(() => {});
-  }, []);
+  }, [unlocked]);
   useEffect(() => {
     if (mode === 'shell') field.current?.focus();
     area.current?.scrollTo(0, area.current.scrollHeight);
@@ -68,6 +83,90 @@ export default function LinuxTerminal({
   function execute() {
     const raw = input;
     const nextHistory = raw.trim() ? [...history, raw] : history;
+    const words = raw.trim().split(/\s+/),
+      command = words[0].toLowerCase();
+    const answer = (text: string) => {
+      setInput('');
+      setHistory(nextHistory);
+      setHistoryIndex(-1);
+      setLines((l) => [...l.slice(-600), `${prompt} ${raw}`, text, '']);
+    };
+    if (command === 'uistart') {
+      if (unlocked) {
+        answer('Starting the graphical desktop…');
+        onStartUI();
+      } else
+        answer(
+          'UI locked. Find ctf.txt and submit its contents with -flag FLAG{...} first. Type hint for help.',
+        );
+      return;
+    }
+    if (command === '-flag') {
+      if (unlocked)
+        answer('Flag already captured. Type help to explore, or UIstart to launch the UI.');
+      else if (words.length === 2 && words[1] === ENTRY_FLAG) {
+        try {
+          sessionStorage.setItem('pc-terminal-flag', 'captured');
+        } catch {
+          /* Current session still unlocks. */
+        }
+        fs.current = new LinuxFilesystem();
+        setCwd('/home/guest');
+        setUnlocked(true);
+        answer(
+          'FLAG CAPTURED — terminal access granted.\n\nWelcome to the real portfolio terminal. Type help for commands, cat CV.txt for my résumé, or ls to explore.\nType UIstart whenever you want to launch the UI.',
+        );
+      } else answer('Flag not accepted. Read ctf.txt and enter: -flag followed by the exact flag.');
+      return;
+    }
+    if (!unlocked) {
+      if (command === 'hint' || command === 'help') {
+        answer(
+          challengeHint +
+            '\n\nCommands: ls, ls -a, cd DIRECTORY, cd .., pwd, cat FILE, find . -name ctf.txt, clear.\nYou can also move or edit the local challenge files with mv, cp, mkdir, touch, echo and >.\nSubmit: -flag FLAG{...}. Type reset-challenge if you lose a file.',
+        );
+        return;
+      }
+      if (command === 'reset-challenge') {
+        fs.current = challengeFilesystem(true);
+        setCwd('/home/guest');
+        try {
+          localStorage.removeItem('pc-ctf-fs-v1');
+        } catch {
+          /* fresh in-memory tree remains usable */
+        }
+        answer('Challenge files restored. ' + challengeHint);
+        return;
+      }
+      const allowed = new Set([
+        'ls',
+        'cd',
+        'pwd',
+        'cat',
+        'find',
+        'clear',
+        'echo',
+        'mkdir',
+        'touch',
+        'mv',
+        'cp',
+        'rm',
+        'head',
+        'tail',
+        'grep',
+        'history',
+        'man',
+      ]);
+      if (command && !allowed.has(command)) {
+        answer('This boot shell is locked. Type help for the challenge commands.');
+        return;
+      }
+      // Prevent invoking portfolio-only commands through a pipeline before the flag is captured.
+      if (raw.split('|').some((part) => !allowed.has(part.trim().split(/\s+/)[0]) && part.trim())) {
+        answer('Only challenge commands are available until you capture the flag.');
+        return;
+      }
+    }
     const result = runShell(
       raw,
       fs.current,
@@ -96,7 +195,12 @@ export default function LinuxTerminal({
     const parts = input.split(' ');
     const term = parts.at(-1) || '';
     if (parts.length === 1) {
-      const matches = linuxCommands.filter((c) => c.startsWith(term));
+      const matches = [
+        ...linuxCommands,
+        'UIstart',
+        '-flag',
+        ...(!unlocked ? ['hint', 'reset-challenge'] : []),
+      ].filter((c) => c.toLowerCase().startsWith(term.toLowerCase()));
       if (matches.length === 1) setInput(matches[0] + ' ');
       else if (matches.length) setLines((l) => [...l, matches.join('  ')]);
     } else {
@@ -118,13 +222,17 @@ export default function LinuxTerminal({
     }
   };
   return (
-    <div className="linux-terminal" data-system-mode="LINUX_TERMINAL">
+    <div
+      className="linux-terminal"
+      data-system-mode="LINUX_TERMINAL"
+      data-entry-phase={unlocked ? 'unlocked' : 'locked'}
+    >
       <header>
         <span>
           PORTFOLIO LINUX <i /> tty1
         </span>
         <span>
-          guest session <button onClick={reboot}>Reboot to desktop</button>
+          {unlocked ? 'guest session · UIstart launches the UI' : 'boot challenge · type help'}
         </span>
       </header>
       {mode === 'snake' ? (

@@ -79,7 +79,10 @@ test('chess participant isolation, owner acceptance, legal turns, conflicts and 
   assert.equal(board.status, 'finished');
   assert.equal(board.result, 'Owner wins by checkmate');
   assert.match(board.pgn, /Qh4#/);
-  assert.deepEqual(await (await call(path, 'GET', undefined, token)).json(), board);
+  const persisted = await (await call(path, 'GET', undefined, token)).json();
+  assert.equal(persisted.pgn, board.pgn);
+  assert.equal(persisted.version, board.version);
+  assert.equal(persisted.result, board.result);
   assert.equal(
     (await call(path + '/moves', 'POST', { from: 'e2', to: 'e4', version: board.version }, token))
       .status,
@@ -103,11 +106,85 @@ test('chess request cancellation and notification setup remain owner-only', asyn
   );
   assert.equal((await call('/admin/chess/push', 'POST', {}, '')).status, 401);
   const cfg = await (await call('/chess/config', 'GET', undefined, '')).json();
+  assert.deepEqual(cfg.timeControlsSeconds, [0, 180, 300, 600, 900]);
+  assert.equal(cfg.defaultTimeControl, 600);
   if (!cfg.pushAvailable) {
     assert.equal(cfg.publicKey, null);
     assert.equal((await call('/admin/chess/push', 'POST', {})).status, 503);
   }
 });
+test(
+  'online clocks persist, reject client clock changes and enforce timeout before moves',
+  { skip: !process.env.LIBRARY_TEST_DATABASE_URL },
+  async () => {
+    const db = new Pool({ connectionString: process.env.LIBRARY_TEST_DATABASE_URL });
+    try {
+      const response = await call(
+        '/chess/matches',
+        'POST',
+        { nickname: 'Clock integration', timeControl: 180 },
+        '',
+      );
+      assert.equal(response.status, 201);
+      const { match, token } = await response.json();
+      ids.push(match.id);
+      const path = '/chess/matches/' + match.id;
+      assert.equal(match.whiteMs, 180000);
+      assert.equal(match.blackMs, 180000);
+      assert.equal((await (await call(path, 'GET', undefined, token)).json()).whiteMs, 180000);
+      let board = await (await call('/admin' + path + '/accept', 'POST')).json();
+      assert.equal(board.status, 'active');
+      assert.equal(
+        (
+          await call(
+            path + '/moves',
+            'POST',
+            { from: 'e2', to: 'e4', version: board.version, whiteMs: 999999 },
+            token,
+          )
+        ).status,
+        400,
+      );
+      await db.query(
+        "UPDATE chess_matches SET clock_updated_at=now()-interval '5 seconds' WHERE id=$1",
+        [match.id],
+      );
+      board = await (
+        await call(path + '/moves', 'POST', { from: 'e2', to: 'e4', version: board.version }, token)
+      ).json();
+      assert.match(board.pgn, /e4/);
+      assert.ok(board.whiteMs <= 175001 && board.whiteMs > 170000);
+      const white = board.whiteMs,
+        pgn = board.pgn;
+      await db.query(
+        "UPDATE chess_matches SET black_ms=1000,clock_updated_at=now()-interval '2 seconds' WHERE id=$1",
+        [match.id],
+      );
+      board = await (
+        await call(path + '/moves', 'POST', { from: 'e7', to: 'e5', version: board.version })
+      ).json();
+      assert.equal(board.status, 'finished');
+      assert.equal(board.result, 'Visitor wins on time');
+      assert.equal(board.pgn, pgn);
+      assert.equal(board.whiteMs, white);
+      assert.equal(board.blackMs, 0);
+      const persisted = await (await call(path, 'GET', undefined, token)).json();
+      assert.equal(persisted.result, board.result);
+      assert.equal(persisted.version, board.version);
+      // Exercise timeout settlement on a read as well as on a move using only this test row.
+      await db.query(
+        "UPDATE chess_matches SET status='active',result='',clock_updated_at=now()-interval '2 seconds',black_ms=1000 WHERE id=$1",
+        [match.id],
+      );
+      assert.equal(
+        (await (await call(path, 'GET', undefined, token)).json()).result,
+        'Visitor wins on time',
+      );
+    } finally {
+      await db.end();
+    }
+  },
+);
 async function upload(bytes, name, auth = owner) {
   const f = new FormData();
   f.append('title', 'OS integration ' + name);
